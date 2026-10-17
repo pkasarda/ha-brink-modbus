@@ -5,21 +5,28 @@
         "title": "Nastavenie BRINK rekuperačnej jednotky",
         "description": "Nastavte pripojenie k vášmu BRINK HRU zariadeniu",
         "data": {
-          "port": "Sériový port",
-          "slave_id": "Modbus Slave ID",
-          "baudrate": "Prenosová rýchlosť",
-          "model": "BRINK model"
+          "connection_type": "Typ pripojenia"
         },
         "data_description": {
-          "port": "Cesta k sériovému portu (napr. /dev/ttyUSB0)",
-          "slave_id": "Modbus slave adresa (1-247, predvolené: 20)",
-          "baudrate": "Rýchlosť komunikácie (predvolené: 19200)",
-          "model": "Vyberte váš BRINK model"
+          "connection_type": "Vyberte bránu Modbus TCP alebo sériové RS485."
+        }
+      },
+      "connection": {
+        "title": "Nastavenie pripojenia BRINK",
+        "data": {
+          "host": "Hostiteľ alebo IP adresa brány",
+          "port": "TCP port",
+          "slave_id": "Modbus Slave ID",
+          "baudrate": "Prenosová rýchlosť",
+          "model": "BRINK model",
+          "control_enabled": "Povoliť zapisovateľné ovládanie"
         }
       }
     },
     "error": {
       "cannot_connect": "Nepodarilo sa pripojiť k BRINK zariadeniu. Skontrolujte: 1) Cesta k sériovému portu je správna, 2) USB to RS485 konvertor je pripojený, 3) Slave ID sa zhoduje s nastavením zariadenia (predvolené: 20), 4) Nástenný ovládač je odpojený. Detaily nájdete v logoch.",
+      "invalid_input": "Skontrolujte nastavenie pripojenia.",
+      "invalid_response": "Brána sa pripojila, ale BRINK odmietol čítanie registra.",
       "unknown": "Nastala neočakávaná chyba. Detaily nájdete v Home Assistant logoch."
     },
     "abort": {

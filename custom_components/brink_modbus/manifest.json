@@ -4,11 +4,11 @@
   "codeowners": ["@Kepro"],
   "config_flow": true,
   "dependencies": ["modbus"],
-  "documentation": "https://github.com/Kepro/ha-brink-modbus",
+  "documentation": "https://github.com/kloknibor/ha-brink-modbus",
   "integration_type": "device",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/Kepro/ha-brink-modbus/issues",
+  "issue_tracker": "https://github.com/kloknibor/ha-brink-modbus/issues",
   "loggers": ["custom_components.brink_modbus"],
-  "requirements": ["pymodbus>=3.10.0"],
-  "version": "2.6.0"
+  "requirements": ["pymodbus>=3.10.0,<4.0.0"],
+  "version": "2.7.0"
 }

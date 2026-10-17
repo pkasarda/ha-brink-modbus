@@ -1,0 +1,30 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Połączenie BRINK Modbus",
+        "description": "Wybierz sposób połączenia Home Assistant z jednostką BRINK.",
+        "data": {"connection_type": "Typ połączenia"}
+      },
+      "connection": {
+        "title": "Ustawienia połączenia BRINK",
+        "description": "Tryb tylko do odczytu jest bezpieczny domyślnie i nie zapisuje danych do jednostki.",
+        "data": {
+          "host": "Host lub adres IP bramy",
+          "port": "Port lub urządzenie szeregowe",
+          "slave_id": "Modbus Slave ID",
+          "baudrate": "Prędkość transmisji",
+          "model": "Model BRINK",
+          "control_enabled": "Włącz sterowanie z zapisem"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Nie można połączyć się z urządzeniem BRINK Modbus.",
+      "invalid_input": "Sprawdź ustawienia połączenia.",
+      "invalid_response": "Brama połączyła się, ale BRINK odrzucił odczyt rejestru.",
+      "unknown": "Nieoczekiwany błąd. Sprawdź dziennik Home Assistant."
+    },
+    "abort": {"already_configured": "Urządzenie jest już skonfigurowane"}
+  }
+}

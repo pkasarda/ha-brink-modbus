@@ -1,4 +1,4 @@
-"""Config flow for BRINK Heat Recovery Unit integration."""
+"""Config flow for the BRINK Modbus integration."""
 from __future__ import annotations
 
 import logging
@@ -6,11 +6,12 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.const import CONF_PORT
+from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
@@ -21,231 +22,233 @@ from homeassistant.helpers.selector import (
     TextSelectorConfig,
     TextSelectorType,
 )
-from pymodbus.client import AsyncModbusSerialClient
-from pymodbus.exceptions import ConnectionException, ModbusException
+from pymodbus.exceptions import ConnectionException, ModbusException, ModbusIOException
+from pymodbus.pdu import ExceptionResponse
 
 from .const import (
-    DOMAIN,
-    DEFAULT_SLAVE_ID,
+    CONF_BAUDRATE,
+    CONF_CONNECTION_TYPE,
+    CONF_CONTROL_ENABLED,
+    CONF_MODEL,
+    CONF_SERIAL_PORT,
+    CONNECTION_TYPE_RTU_OVER_TCP,
+    CONNECTION_TYPE_SERIAL,
+    CONNECTION_TYPE_TCP,
     DEFAULT_BAUDRATE,
+    DEFAULT_CONNECTION_TYPE,
+    DEFAULT_CONTROL_ENABLED,
+    DEFAULT_SLAVE_ID,
+    DEFAULT_TCP_PORT,
+    DOMAIN,
     SUPPORTED_MODELS,
+)
+from .transport import (
+    async_close_client,
+    connection_type,
+    create_modbus_client,
+    validate_host,
+    validate_slave_id,
+    validate_tcp_port,
+    validate_transport_config,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
-STEP_USER_DATA_SCHEMA = vol.Schema(
-    {
-        vol.Required(CONF_PORT, default="/dev/ttyUSB0"): TextSelector(
-            TextSelectorConfig(type=TextSelectorType.TEXT)
-        ),
+CONNECTION_OPTIONS = [
+    {"value": CONNECTION_TYPE_TCP, "label": "Modbus TCP Gateway"},
+    {"value": CONNECTION_TYPE_SERIAL, "label": "Serial RS485"},
+    {"value": CONNECTION_TYPE_RTU_OVER_TCP, "label": "RTU-over-TCP Gateway"},
+]
+
+
+def _model_selector() -> SelectSelector:
+    """Return the common BRINK model selector."""
+    return SelectSelector(
+        SelectSelectorConfig(
+            options=[{"value": key, "label": label} for key, label in SUPPORTED_MODELS.items()],
+            mode=SelectSelectorMode.DROPDOWN,
+        )
+    )
+
+
+def _common_connection_schema() -> dict[Any, Any]:
+    """Build fields shared by serial and network forms."""
+    return {
         vol.Required("slave_id", default=DEFAULT_SLAVE_ID): NumberSelector(
             NumberSelectorConfig(min=1, max=247, mode=NumberSelectorMode.BOX)
         ),
-        vol.Required("baudrate", default=str(DEFAULT_BAUDRATE)): SelectSelector(
-            SelectSelectorConfig(
-                options=["9600", "19200", "38400", "57600", "115200"],
-                mode=SelectSelectorMode.DROPDOWN,
-            )
-        ),
-        vol.Required("model", default="flair_325_plus"): SelectSelector(
-            SelectSelectorConfig(
-                options=[
-                    {"value": k, "label": v} for k, v in SUPPORTED_MODELS.items()
-                ],
-                mode=SelectSelectorMode.DROPDOWN,
-            )
-        ),
+        vol.Required(CONF_MODEL, default="flair_400"): _model_selector(),
+        vol.Required(CONF_CONTROL_ENABLED, default=DEFAULT_CONTROL_ENABLED): BooleanSelector(),
     }
-)
+
+
+def connection_schema(transport: str) -> vol.Schema:
+    """Return the relevant configuration schema for a selected transport."""
+    fields = _common_connection_schema()
+    if transport == CONNECTION_TYPE_SERIAL:
+        fields = {
+            vol.Required(CONF_SERIAL_PORT, default="/dev/ttyUSB0"): TextSelector(
+                TextSelectorConfig(type=TextSelectorType.TEXT)
+            ),
+            vol.Required(CONF_BAUDRATE, default=str(DEFAULT_BAUDRATE)): SelectSelector(
+                SelectSelectorConfig(
+                    options=["9600", "19200", "38400", "57600", "115200"],
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            **fields,
+        }
+    else:
+        fields = {
+            vol.Required(CONF_HOST): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
+            vol.Required(CONF_PORT, default=DEFAULT_TCP_PORT): NumberSelector(
+                NumberSelectorConfig(min=1, max=65535, mode=NumberSelectorMode.BOX)
+            ),
+            **fields,
+        }
+    return vol.Schema(fields)
+
+
+def connection_unique_id(data: dict[str, Any]) -> str:
+    """Return a stable identifier without changing existing serial IDs."""
+    transport = connection_type(data)
+    slave_id = validate_slave_id(data.get("slave_id", DEFAULT_SLAVE_ID))
+    if transport == CONNECTION_TYPE_SERIAL:
+        # Keep the exact pre-TCP entry format so existing serial devices retain
+        # their config-entry and entity identifiers.
+        return f"{data[CONF_SERIAL_PORT]}_{slave_id}"
+    host = validate_host(data[CONF_HOST]).lower()
+    port = validate_tcp_port(data.get(CONF_PORT, DEFAULT_TCP_PORT))
+    return f"{transport}_{host}_{port}_{slave_id}"
+
 
 async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
-    """Validate the user input allows us to connect."""
-    
-    port = data[CONF_PORT]
-    slave_id = int(data["slave_id"])
-    baudrate = int(data["baudrate"])
-    
-    _LOGGER.info(
-        "Validating connection to BRINK HRU: port=%s, slave_id=%s, baudrate=%s",
-        port, slave_id, baudrate
-    )
-    
-    # Check if port exists (for Unix-like systems)
-    import os
-    if not os.path.exists(port):
-        error_msg = f"Serial port does not exist: {port}"
-        _LOGGER.error(error_msg)
-        raise CannotConnect(error_msg)
-    
-    # Initialize async client
-    # AsyncModbusSerialClient defaults to FramerType.RTU
-    # NOTE: slave_id must be passed as parameter in each read/write call!
-    client = AsyncModbusSerialClient(
-        port=port,
-        baudrate=baudrate,
-        bytesize=8,
-        parity="E",
-        stopbits=1,
-        timeout=5,
-        retries=3,
-        # framer=FramerType.RTU is default, no need to specify
-    )
-    
-    _LOGGER.info(
-        "Modbus RTU client configuration: port=%s, baudrate=%s, parity=E, stopbits=1, slave_id=%s, timeout=5s, retries=3, framer=RTU",
-        port, baudrate, slave_id
-    )
-    
+    """Connect and read the documented read-only appliance-type register."""
+    del hass  # Configuration validation is fully asynchronous in PyModbus.
+    validate_transport_config(data)
+    slave_id = validate_slave_id(data.get("slave_id", DEFAULT_SLAVE_ID))
+    client = create_modbus_client(data)
     try:
-        # Try to connect (native async, no executor needed)
-        _LOGGER.info("Attempting to connect to serial port %s...", port)
-        await client.connect()
-        
-        if not client.connected:
-            error_msg = f"Failed to connect to serial port {port}"
-            _LOGGER.error(error_msg)
-            raise CannotConnect(error_msg)
-        
-        _LOGGER.info("Serial port connected successfully!")
-        _LOGGER.info("Reading device type register (address 4004, slave_id=%s)...", slave_id)
-        
-        # Try to read device type register
-        # AsyncModbusSerialClient is native async - no executor needed
-        # CRITICAL: device_id parameter must be passed in each call (pymodbus 3.10.0+)!
         try:
+            connected = await client.connect()
+        except (ConnectionException, ModbusIOException, OSError, TimeoutError) as err:
+            raise CannotConnect("Unable to establish a Modbus connection") from err
+        if connected is False or not getattr(client, "connected", False):
+            raise CannotConnect("Unable to establish a Modbus connection")
+
+        try:
+            # Brink Flair manuals specify input register 4004 as Appliance Type.
+            # It is read-only and makes validation safe for monitoring installs.
             result = await client.read_input_registers(4004, count=1, device_id=slave_id)
-        except Exception as read_err:
-            error_msg = (
-                f"Modbus read exception (slave_id={slave_id}, address=4004): {type(read_err).__name__}: {read_err}\n\n"
-                f"Possible causes:\n"
-                f"1. Slave ID mismatch - device may be configured with different ID\n"
-                f"2. Wall controller still connected - MUST be disconnected for Modbus\n"
-                f"3. RS485 wiring issue - check A/B connections\n"
-                f"4. Wrong baudrate - verify device is set to {baudrate}"
-            )
-            _LOGGER.error(error_msg)
-            raise CannotConnect(error_msg) from read_err
-        
-        if result.isError():
-            error_msg = (
-                f"Modbus error response (slave_id={slave_id}, address=4004): {result}\n\n"
-                f"Common issues:\n"
-                f"• Slave ID {slave_id} not responding - try checking device Modbus settings\n"
-                f"• Wall controller interference - ensure it is UNPLUGGED\n"
-                f"• Device not in Modbus mode - may need activation\n"
-                f"• Timeout - device may be slow to respond"
-            )
-            _LOGGER.error(error_msg)
-            raise CannotConnect(error_msg)
-        
-        device_type = result.registers[0]
-        _LOGGER.info("✓ Device type register read successfully: %s (0x%04X)", device_type, device_type)
-            
-        # Try to read serial number
-        _LOGGER.info("Reading serial number register (address 4010)...")
-        result = await client.read_input_registers(4010, count=1, device_id=slave_id)
-        
-        serial_number = result.registers[0] if not result.isError() else "Unknown"
-        if not result.isError():
-            _LOGGER.info("✓ Serial number: %s", serial_number)
-        else:
-            _LOGGER.warning("Could not read serial number: %s", result)
-        
-        device_info = {
-            "title": f"BRINK {SUPPORTED_MODELS[data['model']]}",
-            "serial_number": serial_number,
+        except (ConnectionException, ModbusIOException, OSError, TimeoutError) as err:
+            raise CannotConnect("No response from the BRINK Modbus device") from err
+        except ModbusException as err:
+            raise CannotConnect("Modbus request failed while reading Appliance Type") from err
+
+        if result is None or result.isError():
+            if isinstance(result, ExceptionResponse):
+                raise InvalidResponse("The BRINK rejected the Appliance Type register read")
+            raise CannotConnect("No usable response from the BRINK Modbus device")
+        if not getattr(result, "registers", None):
+            raise InvalidResponse("The BRINK returned an empty Appliance Type response")
+
+        return {
+            "title": f"BRINK {SUPPORTED_MODELS[data[CONF_MODEL]]}",
+            "device_type": result.registers[0],
         }
-        
-        _LOGGER.info("=" * 60)
-        _LOGGER.info("✓✓✓ Successfully validated connection to BRINK HRU!")
-        _LOGGER.info("Device: %s", device_info["title"])
-        _LOGGER.info("Serial: %s", serial_number)
-        _LOGGER.info("Port: %s", port)
-        _LOGGER.info("Slave ID: %s", slave_id)
-        _LOGGER.info("=" * 60)
-        return device_info
-        
-    except ConnectionException as err:
-        error_msg = (
-            f"Modbus connection error on {port}: {err}\n\n"
-            f"Check:\n"
-            f"• USB to RS485 converter is connected\n"
-            f"• Port permissions (may need: sudo chmod 666 {port})\n"
-            f"• No other application is using the port"
-        )
-        _LOGGER.error(error_msg)
-        raise CannotConnect(error_msg) from err
-    except ModbusException as err:
-        error_msg = (
-            f"Modbus protocol error (slave_id={slave_id}): {err}\n\n"
-            f"⚠️ CRITICAL CHECKLIST:\n"
-            f"1. Wall controller MUST be disconnected (unplug it!)\n"
-            f"2. Slave ID on device must match (check BRINK settings)\n"
-            f"3. RS485 wiring: A to A, B to B\n"
-            f"4. Baudrate must be {baudrate} on device\n"
-            f"5. Device must be powered on"
-        )
-        _LOGGER.error(error_msg)
-        raise CannotConnect(error_msg) from err
-    except CannotConnect:
-        raise
-    except Exception as err:
-        error_msg = f"Unexpected error during validation: {type(err).__name__}: {err}"
-        _LOGGER.exception(error_msg)
-        raise CannotConnect(error_msg) from err
     finally:
         try:
-            client.close()
-            _LOGGER.debug("Closed validation connection")
-        except Exception as err:
-            _LOGGER.warning("Error closing validation connection: %s", err)
+            await async_close_client(client)
+        except Exception as err:  # noqa: BLE001 - validation failure must remain actionable.
+            _LOGGER.debug("Error closing BRINK validation client: %s", err)
+
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for BRINK HRU."""
+    """Handle configuration for serial and Ethernet BRINK connections."""
 
     VERSION = 1
+
+    def __init__(self) -> None:
+        """Initialize the two-step flow."""
+        super().__init__()
+        self._connection_type = DEFAULT_CONNECTION_TYPE
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle the initial step."""
-        errors: dict[str, str] = {}
-        
+        """Select the Modbus transport before collecting its settings."""
         if user_input is not None:
             try:
-                info = await validate_input(self.hass, user_input)
-            except CannotConnect as err:
-                _LOGGER.error("Connection validation failed: %s", err)
-                errors["base"] = "cannot_connect"
-            except Exception as err:  # pylint: disable=broad-except
-                _LOGGER.exception("Unexpected exception during setup: %s", err)
-                errors["base"] = "unknown"
-            else:
-                # Create unique ID based on port and slave ID
-                unique_id = f"{user_input[CONF_PORT]}_{user_input['slave_id']}"
-                await self.async_set_unique_id(unique_id)
-                self._abort_if_unique_id_configured()
-                
-                return self.async_create_entry(
-                    title=info["title"],
-                    data=user_input,
+                self._connection_type = connection_type(user_input)
+            except ValueError:
+                return self.async_show_form(
+                    step_id="user",
+                    data_schema=vol.Schema(
+                        {
+                            vol.Required(
+                                CONF_CONNECTION_TYPE, default=DEFAULT_CONNECTION_TYPE
+                            ): SelectSelector(
+                                SelectSelectorConfig(
+                                    options=CONNECTION_OPTIONS,
+                                    mode=SelectSelectorMode.DROPDOWN,
+                                )
+                            )
+                        }
+                    ),
+                    errors={"base": "invalid_connection_type"},
                 )
-
-        # Build schema with suggested values from user_input if available
-        data_schema = STEP_USER_DATA_SCHEMA
-        if user_input is not None:
-            data_schema = self.add_suggested_values_to_schema(
-                data_schema, user_input
-            )
+            return await self.async_step_connection()
 
         return self.async_show_form(
             step_id="user",
-            data_schema=data_schema,
-            errors=errors,
-            description_placeholders={
-                "supported_models": ", ".join(SUPPORTED_MODELS.values())
-            },
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_CONNECTION_TYPE, default=DEFAULT_CONNECTION_TYPE): SelectSelector(
+                        SelectSelectorConfig(
+                            options=CONNECTION_OPTIONS,
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    )
+                }
+            ),
         )
 
+    async def async_step_connection(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Validate settings for the selected Modbus transport."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            data = {**user_input, CONF_CONNECTION_TYPE: self._connection_type}
+            try:
+                info = await validate_input(self.hass, data)
+            except ValueError:
+                errors["base"] = "invalid_input"
+            except InvalidResponse:
+                errors["base"] = "invalid_response"
+            except CannotConnect:
+                errors["base"] = "cannot_connect"
+            except Exception:  # pragma: no cover - Home Assistant reports details in logs.
+                _LOGGER.exception("Unexpected BRINK configuration validation error")
+                errors["base"] = "unknown"
+            else:
+                await self.async_set_unique_id(connection_unique_id(data))
+                self._abort_if_unique_id_configured()
+                return self.async_create_entry(title=info["title"], data=data)
+
+        schema = connection_schema(self._connection_type)
+        if user_input is not None:
+            schema = self.add_suggested_values_to_schema(schema, user_input)
+        return self.async_show_form(
+            step_id="connection",
+            data_schema=schema,
+            errors=errors,
+        )
+
+
 class CannotConnect(HomeAssistantError):
-    """Error to indicate we cannot connect."""
+    """Error to indicate that the device could not be reached."""
+
+
+class InvalidResponse(HomeAssistantError):
+    """Error to indicate that a connected device did not accept the request."""

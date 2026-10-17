@@ -11,7 +11,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN, HOLDING_REGISTERS
 from .coordinator import BrinkCoordinator
-from .entity import BrinkEntity
+from .entity import BrinkControlEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ async def async_setup_entry(
     
     async_add_entities(entities)
 
-class BrinkImbalanceAllowedSwitch(BrinkEntity, SwitchEntity):
+class BrinkImbalanceAllowedSwitch(BrinkControlEntity, SwitchEntity):
     """BRINK imbalance allowed switch."""
 
     def __init__(self, coordinator: BrinkCoordinator, entry: ConfigEntry) -> None:
@@ -71,7 +71,7 @@ class BrinkImbalanceAllowedSwitch(BrinkEntity, SwitchEntity):
         if not success:
             _LOGGER.error("Failed to disable imbalance allowance")
 
-class BrinkCO2SensorModeSwitch(BrinkEntity, SwitchEntity):
+class BrinkCO2SensorModeSwitch(BrinkControlEntity, SwitchEntity):
     """BRINK CO2 sensor mode switch."""
 
     def __init__(self, coordinator: BrinkCoordinator, entry: ConfigEntry) -> None:
@@ -111,7 +111,7 @@ class BrinkCO2SensorModeSwitch(BrinkEntity, SwitchEntity):
         if not success:
             _LOGGER.error("Failed to disable CO2 sensor mode")
 
-class BrinkGeoHeatExchangerSwitch(BrinkEntity, SwitchEntity):
+class BrinkGeoHeatExchangerSwitch(BrinkControlEntity, SwitchEntity):
     """BRINK geo heat exchanger switch."""
 
     def __init__(self, coordinator: BrinkCoordinator, entry: ConfigEntry) -> None:
@@ -151,7 +151,7 @@ class BrinkGeoHeatExchangerSwitch(BrinkEntity, SwitchEntity):
         if not success:
             _LOGGER.error("Failed to disable geo heat exchanger")
 
-class BrinkDeviceResetSwitch(BrinkEntity, SwitchEntity):
+class BrinkDeviceResetSwitch(BrinkControlEntity, SwitchEntity):
     """BRINK device reset switch."""
 
     def __init__(self, coordinator: BrinkCoordinator, entry: ConfigEntry) -> None:
@@ -184,4 +184,3 @@ class BrinkDeviceResetSwitch(BrinkEntity, SwitchEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off - no action needed for reset."""
-        pass  # Reset switch is always "off"

@@ -9,9 +9,9 @@ from homeassistant.const import PERCENTAGE, UnitOfVolumeFlowRate
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, HOLDING_REGISTERS
+from .const import DOMAIN, HOLDING_REGISTERS, get_airflow_limits, get_max_airflow
 from .coordinator import BrinkCoordinator
-from .entity import BrinkEntity
+from .entity import BrinkControlEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ async def async_setup_entry(
     
     async_add_entities(entities)
 
-class BrinkFlowLevelNumber(BrinkEntity, NumberEntity):
+class BrinkFlowLevelNumber(BrinkControlEntity, NumberEntity):
     """BRINK flow level number entity."""
 
     def __init__(
@@ -67,7 +67,7 @@ class BrinkFlowLevelNumber(BrinkEntity, NumberEntity):
         
         # Set limits from config
         self._attr_native_min_value = self._config.get("min", 0)
-        self._attr_native_max_value = self._config.get("max", 325)
+        self._attr_native_max_value = get_max_airflow(coordinator.model)
         self._attr_native_step = 5
 
     @property
@@ -88,7 +88,7 @@ class BrinkFlowLevelNumber(BrinkEntity, NumberEntity):
         if not success:
             _LOGGER.error("Failed to set %s to %s", self._setting_key, value)
 
-class BrinkFlowSetpointNumber(BrinkEntity, NumberEntity):
+class BrinkFlowSetpointNumber(BrinkControlEntity, NumberEntity):
     """BRINK flow setpoint number entity."""
 
     def __init__(self, coordinator: BrinkCoordinator, entry: ConfigEntry) -> None:
@@ -103,8 +103,9 @@ class BrinkFlowSetpointNumber(BrinkEntity, NumberEntity):
         self._attr_mode = NumberMode.SLIDER
         
         # Set limits from config
-        self._attr_native_min_value = self._config.get("min", 50)
-        self._attr_native_max_value = self._config.get("max", 325)
+        self._attr_native_min_value, self._attr_native_max_value = get_airflow_limits(
+            coordinator.model
+        )
         self._attr_native_step = 5
 
     @property
@@ -115,28 +116,27 @@ class BrinkFlowSetpointNumber(BrinkEntity, NumberEntity):
             
         return self.coordinator.data.get("flow_setpoint")
 
+    @property
+    def available(self) -> bool:
+        """The device accepts 8002 only in explicitly selected flow mode."""
+        return (
+            super().available
+            and self.coordinator.data is not None
+            and self.coordinator.data.get("modbus_control") == 2
+        )
+
     async def async_set_native_value(self, value: float) -> None:
         """Set the value."""
-        # Check if modbus control is in Flow Control mode (2)
+        # Brink requires an explicit Flow Control mode change before register
+        # 8002 accepts a flow target. Do not change 8000 as a side effect.
         current_control_mode = self.coordinator.data.get("modbus_control") if self.coordinator.data else None
         
         if current_control_mode != 2:
-            _LOGGER.info(
-                "Flow setpoint requires Flow Control mode (2), currently: %s. Enabling Flow Control...",
-                current_control_mode
+            _LOGGER.warning(
+                "Flow setpoint requires explicit Flow Control mode; current mode is %s",
+                current_control_mode,
             )
-            # Enable Flow Control mode first
-            control_success = await self.coordinator.async_write_register(
-                HOLDING_REGISTERS["modbus_control"]["address"],
-                2  # Flow Control mode
-            )
-            if not control_success:
-                _LOGGER.error("Failed to enable Flow Control mode")
-                return
-            
-            # Wait a moment for mode change
-            import asyncio
-            await asyncio.sleep(0.5)
+            return
         
         success = await self.coordinator.async_write_register(
             self._config["address"],
@@ -148,7 +148,7 @@ class BrinkFlowSetpointNumber(BrinkEntity, NumberEntity):
         else:
             _LOGGER.info("Successfully set flow setpoint to %s m³/h", value)
 
-class BrinkImbalanceOffsetNumber(BrinkEntity, NumberEntity):
+class BrinkImbalanceOffsetNumber(BrinkControlEntity, NumberEntity):
     """BRINK imbalance offset number entity."""
 
     def __init__(
@@ -192,7 +192,7 @@ class BrinkImbalanceOffsetNumber(BrinkEntity, NumberEntity):
         if not success:
             _LOGGER.error("Failed to set %s to %s", self._setting_key, value)
 
-class BrinkGeoTemperatureNumber(BrinkEntity, NumberEntity):
+class BrinkGeoTemperatureNumber(BrinkControlEntity, NumberEntity):
     """BRINK geo heat exchanger temperature number entity."""
 
     def __init__(

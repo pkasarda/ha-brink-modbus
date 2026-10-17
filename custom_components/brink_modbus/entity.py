@@ -26,3 +26,12 @@ class BrinkEntity(CoordinatorEntity[BrinkCoordinator]):
             "model": SUPPORTED_MODELS.get(entry.data.get("model", "unknown"), "Unknown"),
         }
 
+
+class BrinkControlEntity(BrinkEntity):
+    """Base for a writable entity that honours monitoring-only mode."""
+
+    @property
+    def available(self) -> bool:
+        """Controls are unavailable until the user explicitly enables them."""
+        return self.coordinator.control_enabled and super().available
+

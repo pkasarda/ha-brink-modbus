@@ -5,21 +5,28 @@
         "title": "Konfiguracja jednostki rekuperacyjnej BRINK",
         "description": "Skonfiguruj połączenie z urządzeniem BRINK HRU",
         "data": {
-          "port": "Port szeregowy",
-          "slave_id": "Modbus Slave ID",
-          "baudrate": "Prędkość transmisji",
-          "model": "Model BRINK"
+          "connection_type": "Typ połączenia"
         },
         "data_description": {
-          "port": "Ścieżka do portu szeregowego (np. /dev/ttyUSB0)",
-          "slave_id": "Adres slave Modbus (1-247, domyślny: 20)",
-          "baudrate": "Prędkość komunikacji (domyślny: 19200)",
-          "model": "Wybierz swój model BRINK"
+          "connection_type": "Wybierz bramę Modbus TCP lub szeregowe RS485."
+        }
+      },
+      "connection": {
+        "title": "Ustawienia połączenia BRINK",
+        "data": {
+          "host": "Host lub adres IP bramy",
+          "port": "Port TCP",
+          "slave_id": "Modbus Slave ID",
+          "baudrate": "Prędkość transmisji",
+          "model": "Model BRINK",
+          "control_enabled": "Włącz sterowanie z zapisem"
         }
       }
     },
     "error": {
       "cannot_connect": "Nie udało się połączyć z urządzeniem. Sprawdź port szeregowy i okablowanie.",
+      "invalid_input": "Sprawdź ustawienia połączenia.",
+      "invalid_response": "Brama połączyła się, ale BRINK odrzucił odczyt rejestru.",
       "unknown": "Wystąpił nieoczekiwany błąd"
     },
     "abort": {

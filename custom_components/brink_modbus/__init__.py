@@ -2,19 +2,12 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, CONF_PORT, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import (
-    DOMAIN,
-    PLATFORMS,
-    SCAN_INTERVAL_FAST,
-)
+from .const import DOMAIN, PLATFORMS
 from .coordinator import BrinkCoordinator
 from .services import async_setup_services, async_unload_services
 
@@ -58,10 +51,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     
     if unload_ok:
-        # Disconnect async modbus client to release serial port
+        # Disconnect the serial port or TCP socket before discarding the entry.
         if coordinator:
             await coordinator.disconnect()
-            _LOGGER.debug("Disconnected Modbus client for port %s", coordinator.port)
+            _LOGGER.debug("Disconnected Modbus client for %s", coordinator.connection_description)
         
         hass.data[DOMAIN].pop(entry.entry_id)
         

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
@@ -10,14 +9,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
-    DOMAIN,
     BYPASS_MODE_MAP,
-    POWER_SWITCH_MAP,
-    MODBUS_CONTROL_MAP,
+    DOMAIN,
     HOLDING_REGISTERS,
+    MODBUS_CONTROL_MAP,
+    POWER_SWITCH_MAP,
 )
 from .coordinator import BrinkCoordinator
-from .entity import BrinkEntity
+from .entity import BrinkControlEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -37,7 +36,7 @@ async def async_setup_entry(
     
     async_add_entities(entities)
 
-class BrinkBypassModeSelect(BrinkEntity, SelectEntity):
+class BrinkBypassModeSelect(BrinkControlEntity, SelectEntity):
     """BRINK bypass mode select entity."""
 
     def __init__(self, coordinator: BrinkCoordinator, entry: ConfigEntry) -> None:
@@ -87,7 +86,7 @@ class BrinkBypassModeSelect(BrinkEntity, SelectEntity):
         if not success:
             _LOGGER.error("Failed to set bypass mode to %s", option)
 
-class BrinkPowerSwitchSelect(BrinkEntity, SelectEntity):
+class BrinkPowerSwitchSelect(BrinkControlEntity, SelectEntity):
     """BRINK power switch position select entity."""
 
     def __init__(self, coordinator: BrinkCoordinator, entry: ConfigEntry) -> None:
@@ -103,8 +102,9 @@ class BrinkPowerSwitchSelect(BrinkEntity, SelectEntity):
     @property
     def available(self) -> bool:
         """Return if entity is available."""
-        # Power switch only works in Switch Control mode (1)
-        if self.coordinator.data is None:
+        # Power switch only works in Switch Control mode (1), after writable
+        # controls were explicitly enabled for this config entry.
+        if not super().available or self.coordinator.data is None:
             return False
         
         control_mode = self.coordinator.data.get("modbus_control")
@@ -139,8 +139,6 @@ class BrinkPowerSwitchSelect(BrinkEntity, SelectEntity):
 
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""
-        _LOGGER.info("Power switch: async_select_option called with option=%s", option)
-        
         # Find the numeric value for the selected option
         switch_value = None
         for value, text in POWER_SWITCH_MAP.items():
@@ -152,28 +150,16 @@ class BrinkPowerSwitchSelect(BrinkEntity, SelectEntity):
             _LOGGER.error("Invalid power switch option: %s", option)
             return
         
-        _LOGGER.info("Power switch: mapped option '%s' to value %s", option, switch_value)
-        
-        # Check if modbus control is in Switch Control mode (1)
+        # Brink requires an explicit Switch Control mode change before register
+        # 8001 accepts a switch position. Do not change 8000 as a side effect.
         current_control_mode = self.coordinator.data.get("modbus_control") if self.coordinator.data else None
         
         if current_control_mode != 1:
-            _LOGGER.info(
-                "Power switch requires Switch Control mode (1), currently: %s. Enabling Switch Control...",
-                current_control_mode
+            _LOGGER.warning(
+                "Power switch requires explicit Switch Control mode; current mode is %s",
+                current_control_mode,
             )
-            # Enable Switch Control mode first
-            control_success = await self.coordinator.async_write_register(
-                HOLDING_REGISTERS["modbus_control"]["address"],
-                1  # Switch Control mode
-            )
-            if not control_success:
-                _LOGGER.error("Failed to enable Switch Control mode")
-                return
-            
-            # Wait a moment for mode change
-            import asyncio
-            await asyncio.sleep(0.5)
+            return
             
         # Write to holding register
         success = await self.coordinator.async_write_register(
@@ -186,7 +172,7 @@ class BrinkPowerSwitchSelect(BrinkEntity, SelectEntity):
         else:
             _LOGGER.info("Successfully set power switch to %s (value: %s)", option, switch_value)
 
-class BrinkModbusControlSelect(BrinkEntity, SelectEntity):
+class BrinkModbusControlSelect(BrinkControlEntity, SelectEntity):
     """BRINK Modbus control mode select entity."""
 
     def __init__(self, coordinator: BrinkCoordinator, entry: ConfigEntry) -> None:

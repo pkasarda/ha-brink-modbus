@@ -5,21 +5,28 @@
         "title": "Nastavení BRINK rekuperační jednotky",
         "description": "Nakonfigurujte připojení k vašemu BRINK HRU zařízení",
         "data": {
-          "port": "Sériový port",
-          "slave_id": "Modbus Slave ID",
-          "baudrate": "Přenosová rychlost",
-          "model": "BRINK model"
+          "connection_type": "Typ připojení"
         },
         "data_description": {
-          "port": "Cesta k sériovému portu (např. /dev/ttyUSB0)",
-          "slave_id": "Modbus slave adresa (1-247, výchozí: 20)",
-          "baudrate": "Rychlost komunikace (výchozí: 19200)",
-          "model": "Vyberte váš BRINK model"
+          "connection_type": "Zvolte Modbus TCP bránu nebo sériové RS485."
+        }
+      },
+      "connection": {
+        "title": "Nastavení připojení BRINK",
+        "data": {
+          "host": "Hostitel nebo IP adresa brány",
+          "port": "TCP port",
+          "slave_id": "Modbus Slave ID",
+          "baudrate": "Přenosová rychlost",
+          "model": "BRINK model",
+          "control_enabled": "Povolit zapisovatelné ovládání"
         }
       }
     },
     "error": {
       "cannot_connect": "Nepodařilo se připojit k zařízení. Zkontrolujte sériový port a zapojení.",
+      "invalid_input": "Zkontrolujte nastavení připojení.",
+      "invalid_response": "Brána se připojila, ale BRINK odmítl čtení registru.",
       "unknown": "Nastala neočekávaná chyba"
     },
     "abort": {

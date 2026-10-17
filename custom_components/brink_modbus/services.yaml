@@ -1,6 +1,6 @@
 set_bypass_mode:
   name: Set bypass mode
-  description: Set the bypass mode for the BRINK HRU unit
+  description: Set the bypass mode for a BRINK HRU with controls explicitly enabled.
   target:
     device:
   fields:
@@ -17,7 +17,7 @@ set_bypass_mode:
 
 set_flow_speed:
   name: Set flow speed
-  description: Set the target flow speed for the BRINK HRU unit
+  description: Set the target flow speed after explicitly selecting Flow Control mode. Use 0 or the documented 50–model maximum range.
   target:
     device:
   fields:
@@ -28,13 +28,14 @@ set_flow_speed:
       selector:
         number:
           min: 50
-          max: 325
+          min: 0
+          max: 400
           step: 5
           unit_of_measurement: "m³/h"
 
 set_power_mode:
   name: Set power mode
-  description: Set the power switch position for the BRINK HRU unit
+  description: Set the power switch position after explicitly selecting Switch Control mode.
   target:
     device:
   fields:
@@ -52,7 +53,7 @@ set_power_mode:
 
 reset_device:
   name: Reset device
-  description: Reset the BRINK HRU device (use with caution)
+  description: Reset a BRINK HRU with controls explicitly enabled (use with caution).
   target:
     device:
 

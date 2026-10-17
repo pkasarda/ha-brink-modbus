@@ -2,19 +2,17 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
-from homeassistant.config_entries import ConfigEntry
+import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ServiceValidationError
-from homeassistant.helpers import config_validation as cv
-import voluptuous as vol
 
 from .const import (
-    DOMAIN,
     BYPASS_MODE_MAP,
-    POWER_SWITCH_MAP,
+    DOMAIN,
     HOLDING_REGISTERS,
+    POWER_SWITCH_MAP,
+    get_max_airflow,
 )
 from .coordinator import BrinkCoordinator
 
@@ -26,210 +24,121 @@ SERVICE_SET_POWER_MODE = "set_power_mode"
 SERVICE_RESET_DEVICE = "reset_device"
 SERVICE_READ_ALL_REGISTERS = "read_all_registers"
 
-SET_BYPASS_MODE_SCHEMA = vol.Schema(
-    {
-        vol.Required("mode"): vol.In(["automatic", "closed", "open"]),
-    }
-)
+SET_BYPASS_MODE_SCHEMA = vol.Schema({vol.Required("mode"): vol.In(["automatic", "closed", "open"])})
+# Model-specific limits are checked after the target coordinator is known.
+SET_FLOW_SPEED_SCHEMA = vol.Schema({vol.Required("speed"): vol.All(int, vol.Range(min=0, max=400))})
+SET_POWER_MODE_SCHEMA = vol.Schema({vol.Required("mode"): vol.In(["absence", "low", "normal", "high"])})
 
-SET_FLOW_SPEED_SCHEMA = vol.Schema(
-    {
-        vol.Required("speed"): vol.All(int, vol.Range(min=50, max=325)),
-    }
-)
 
-SET_POWER_MODE_SCHEMA = vol.Schema(
-    {
-        vol.Required("mode"): vol.In(["absence", "low", "normal", "high"]),
-    }
-)
+def _get_coordinator(hass: HomeAssistant, call: ServiceCall) -> BrinkCoordinator:
+    """Resolve a service target and reject monitoring-only entries clearly."""
+    entry_id = call.data.get("config_entry_id")
+    if entry_id:
+        coordinator = hass.data.get(DOMAIN, {}).get(entry_id)
+    else:
+        coordinator = next(
+            (
+                item
+                for item in hass.data.get(DOMAIN, {}).values()
+                if isinstance(item, BrinkCoordinator)
+            ),
+            None,
+        )
+    if not isinstance(coordinator, BrinkCoordinator):
+        raise ServiceValidationError("No BRINK HRU device found")
+    if not coordinator.control_enabled:
+        raise ServiceValidationError(
+            "Controls are disabled for this BRINK entry; reconfigure it with writable controls enabled"
+        )
+    return coordinator
+
+
+def _map_value(mapping: dict[int, str], option: str, label: str) -> int:
+    """Convert a service value to its documented register encoding."""
+    for value, text in mapping.items():
+        if text.lower() == option:
+            return value
+    raise ServiceValidationError(f"Invalid {label}: {option}")
+
 
 async def async_setup_services(hass: HomeAssistant) -> None:
     """Set up BRINK HRU services."""
 
     async def async_set_bypass_mode(call: ServiceCall) -> None:
-        """Set bypass mode service."""
+        coordinator = _get_coordinator(hass, call)
         mode = call.data["mode"]
-        
-        # Find numeric value for mode
-        mode_value = None
-        for value, text in BYPASS_MODE_MAP.items():
-            if text.lower() == mode:
-                mode_value = value
-                break
-                
-        if mode_value is None:
-            raise ServiceValidationError(f"Invalid bypass mode: {mode}")
-        
-        # Find coordinator from service call target
-        entry_id = call.data.get("config_entry_id")
-        if not entry_id:
-            # Get first available coordinator if no target specified
-            coordinators = [
-                coordinator for coordinator in hass.data[DOMAIN].values()
-                if isinstance(coordinator, BrinkCoordinator)
-            ]
-            if not coordinators:
-                raise ServiceValidationError("No BRINK HRU devices found")
-            coordinator = coordinators[0]
-        else:
-            coordinator = hass.data[DOMAIN].get(entry_id)
-            if not coordinator:
-                raise ServiceValidationError(f"BRINK HRU device not found: {entry_id}")
-        
         success = await coordinator.async_write_register(
             HOLDING_REGISTERS["bypass_mode_setting"]["address"],
-            mode_value
+            _map_value(BYPASS_MODE_MAP, mode, "bypass mode"),
         )
-        
         if not success:
             raise ServiceValidationError(f"Failed to set bypass mode to {mode}")
-            
-        _LOGGER.info("BRINK bypass mode set to %s", mode)
 
     async def async_set_flow_speed(call: ServiceCall) -> None:
-        """Set flow speed service."""
+        coordinator = _get_coordinator(hass, call)
         speed = call.data["speed"]
-        
-        # Find coordinator
-        entry_id = call.data.get("config_entry_id")
-        if not entry_id:
-            coordinators = [
-                coordinator for coordinator in hass.data[DOMAIN].values()
-                if isinstance(coordinator, BrinkCoordinator)
-            ]
-            if not coordinators:
-                raise ServiceValidationError("No BRINK HRU devices found")
-            coordinator = coordinators[0]
-        else:
-            coordinator = hass.data[DOMAIN].get(entry_id)
-            if not coordinator:
-                raise ServiceValidationError(f"BRINK HRU device not found: {entry_id}")
-        
+        maximum = get_max_airflow(coordinator.model)
+        if speed != 0 and not 50 <= speed <= maximum:
+            raise ServiceValidationError(
+                f"Flow speed must be 0 or between 50 and {maximum} m³/h for this model"
+            )
+        if not coordinator.data or coordinator.data.get("modbus_control") != 2:
+            raise ServiceValidationError(
+                "Set Modbus Control Mode to Flow Control explicitly before setting flow speed"
+            )
         success = await coordinator.async_write_register(
-            HOLDING_REGISTERS["flow_setpoint"]["address"],
-            speed
+            HOLDING_REGISTERS["flow_setpoint"]["address"], speed
         )
-        
         if not success:
             raise ServiceValidationError(f"Failed to set flow speed to {speed}")
-            
-        _LOGGER.info("BRINK flow speed set to %s m³/h", speed)
 
     async def async_set_power_mode(call: ServiceCall) -> None:
-        """Set power mode service."""
+        coordinator = _get_coordinator(hass, call)
+        if not coordinator.data or coordinator.data.get("modbus_control") != 1:
+            raise ServiceValidationError(
+                "Set Modbus Control Mode to Switch Control explicitly before setting power mode"
+            )
         mode = call.data["mode"]
-        
-        # Find numeric value for mode
-        mode_value = None
-        for value, text in POWER_SWITCH_MAP.items():
-            if text.lower() == mode:
-                mode_value = value
-                break
-                
-        if mode_value is None:
-            raise ServiceValidationError(f"Invalid power mode: {mode}")
-        
-        # Find coordinator
-        entry_id = call.data.get("config_entry_id")
-        if not entry_id:
-            coordinators = [
-                coordinator for coordinator in hass.data[DOMAIN].values()
-                if isinstance(coordinator, BrinkCoordinator)
-            ]
-            if not coordinators:
-                raise ServiceValidationError("No BRINK HRU devices found")
-            coordinator = coordinators[0]
-        else:
-            coordinator = hass.data[DOMAIN].get(entry_id)
-            if not coordinator:
-                raise ServiceValidationError(f"BRINK HRU device not found: {entry_id}")
-        
         success = await coordinator.async_write_register(
             HOLDING_REGISTERS["power_switch_position"]["address"],
-            mode_value
+            _map_value(POWER_SWITCH_MAP, mode, "power mode"),
         )
-        
         if not success:
             raise ServiceValidationError(f"Failed to set power mode to {mode}")
-            
-        _LOGGER.info("BRINK power mode set to %s", mode)
 
     async def async_reset_device(call: ServiceCall) -> None:
-        """Reset device service."""
-        # Find coordinator
-        entry_id = call.data.get("config_entry_id")
-        if not entry_id:
-            coordinators = [
-                coordinator for coordinator in hass.data[DOMAIN].values()
-                if isinstance(coordinator, BrinkCoordinator)
-            ]
-            if not coordinators:
-                raise ServiceValidationError("No BRINK HRU devices found")
-            coordinator = coordinators[0]
-        else:
-            coordinator = hass.data[DOMAIN].get(entry_id)
-            if not coordinator:
-                raise ServiceValidationError(f"BRINK HRU device not found: {entry_id}")
-        
-        _LOGGER.warning("Triggering BRINK device reset")
-        
+        coordinator = _get_coordinator(hass, call)
+        _LOGGER.warning("Triggering a user-requested BRINK device reset")
         success = await coordinator.async_write_register(
-            HOLDING_REGISTERS["device_reset"]["address"],
-            1
+            HOLDING_REGISTERS["device_reset"]["address"], 1
         )
-        
         if not success:
             raise ServiceValidationError("Failed to trigger device reset")
-            
-        _LOGGER.info("BRINK device reset triggered successfully")
 
     async def async_read_all_registers(call: ServiceCall) -> None:
-        """Read all registers for diagnostics."""
-        # Find coordinator
+        """Diagnostic reads remain available in monitoring-only mode."""
         entry_id = call.data.get("config_entry_id")
-        if not entry_id:
-            coordinators = [
-                coordinator for coordinator in hass.data[DOMAIN].values()
-                if isinstance(coordinator, BrinkCoordinator)
-            ]
-            if not coordinators:
-                raise ServiceValidationError("No BRINK HRU devices found")
-            coordinator = coordinators[0]
-        else:
-            coordinator = hass.data[DOMAIN].get(entry_id)
-            if not coordinator:
-                raise ServiceValidationError(f"BRINK HRU device not found: {entry_id}")
-        
-        data = await coordinator.async_read_all_registers()
-        
-        # Fire event with register data
+        coordinator = hass.data.get(DOMAIN, {}).get(entry_id) if entry_id else next(
+            (
+                item
+                for item in hass.data.get(DOMAIN, {}).values()
+                if isinstance(item, BrinkCoordinator)
+            ),
+            None,
+        )
+        if not isinstance(coordinator, BrinkCoordinator):
+            raise ServiceValidationError("No BRINK HRU device found")
         hass.bus.async_fire(
             f"{DOMAIN}_diagnostics",
-            {
-                "device_id": entry_id,
-                "registers": data,
-            }
+            {"device_id": entry_id, "registers": await coordinator.async_read_all_registers()},
         )
-        
-        _LOGGER.info("BRINK register diagnostics data fired as event")
 
-    # Register services
-    hass.services.async_register(
-        DOMAIN, SERVICE_SET_BYPASS_MODE, async_set_bypass_mode, schema=SET_BYPASS_MODE_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN, SERVICE_SET_FLOW_SPEED, async_set_flow_speed, schema=SET_FLOW_SPEED_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN, SERVICE_SET_POWER_MODE, async_set_power_mode, schema=SET_POWER_MODE_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN, SERVICE_RESET_DEVICE, async_reset_device
-    )
-    hass.services.async_register(
-        DOMAIN, SERVICE_READ_ALL_REGISTERS, async_read_all_registers
-    )
+    hass.services.async_register(DOMAIN, SERVICE_SET_BYPASS_MODE, async_set_bypass_mode, schema=SET_BYPASS_MODE_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_SET_FLOW_SPEED, async_set_flow_speed, schema=SET_FLOW_SPEED_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_SET_POWER_MODE, async_set_power_mode, schema=SET_POWER_MODE_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_RESET_DEVICE, async_reset_device)
+    hass.services.async_register(DOMAIN, SERVICE_READ_ALL_REGISTERS, async_read_all_registers)
+
 
 async def async_unload_services(hass: HomeAssistant) -> None:
     """Unload BRINK HRU services."""

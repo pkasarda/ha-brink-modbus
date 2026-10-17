@@ -1,0 +1,39 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "BRINK Modbus connection",
+        "description": "Select how Home Assistant connects to the BRINK unit.",
+        "data": {"connection_type": "Connection type"},
+        "data_description": {"connection_type": "Use Modbus TCP for a TCP-to-RTU gateway. RTU-over-TCP is for transparent serial servers only."}
+      },
+      "connection": {
+        "title": "BRINK connection settings",
+        "description": "Monitoring-only is the safe default and does not write to the ventilation unit.",
+        "data": {
+          "host": "Gateway host or IP address",
+          "port": "Port or serial device",
+          "slave_id": "Modbus slave ID",
+          "baudrate": "Baudrate",
+          "model": "BRINK model",
+          "control_enabled": "Enable writable controls"
+        },
+        "data_description": {
+          "host": "Required for TCP gateway modes.",
+          "port": "TCP port for gateways, or serial device path such as /dev/ttyUSB0.",
+          "slave_id": "BRINK Modbus address, normally 20.",
+          "baudrate": "BRINK default: 19200, 8 data bits, even parity, 1 stop bit.",
+          "control_enabled": "Enable only if you intentionally want Home Assistant to write settings. It never enables Modbus control automatically."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not connect to the BRINK Modbus device.",
+      "invalid_connection_type": "Select a supported connection type.",
+      "invalid_input": "Check the connection settings, host, TCP port, and slave ID.",
+      "invalid_response": "The gateway connected, but the BRINK did not accept the read-only appliance-type request.",
+      "unknown": "Unexpected error. Check Home Assistant logs for details."
+    },
+    "abort": {"already_configured": "Device is already configured"}
+  }
+}

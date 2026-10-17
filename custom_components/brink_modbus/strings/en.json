@@ -3,23 +3,38 @@
     "step": {
       "user": {
         "title": "BRINK Heat Recovery Unit Setup",
-        "description": "Configure your BRINK HRU device connection",
+        "description": "Select how Home Assistant connects to the BRINK unit",
         "data": {
-          "port": "Serial Port",
-          "slave_id": "Modbus Slave ID",
-          "baudrate": "Baudrate",
-          "model": "BRINK Model"
+          "connection_type": "Connection type"
         },
         "data_description": {
-          "port": "Serial port path (e.g., /dev/ttyUSB0)",
-          "slave_id": "Modbus slave address (1-247, default: 20)",
-          "baudrate": "Communication speed (default: 19200)",
-          "model": "Select your BRINK model"
+          "connection_type": "Modbus TCP uses a gateway with MBAP framing; RTU-over-TCP is only for transparent serial servers."
+        }
+      },
+      "connection": {
+        "title": "BRINK connection settings",
+        "description": "Monitoring-only is the safe default and does not write to the ventilation unit.",
+        "data": {
+          "host": "Gateway host or IP address",
+          "port": "Port or serial device",
+          "slave_id": "Modbus slave ID",
+          "baudrate": "Baudrate",
+          "model": "BRINK model",
+          "control_enabled": "Enable writable controls"
+        },
+        "data_description": {
+          "port": "Use 502 for a Waveshare Modbus TCP-to-RTU gateway, or a serial device path for RS485.",
+          "slave_id": "BRINK Modbus address, normally 20.",
+          "baudrate": "BRINK default: 19200, 8 data bits, even parity, 1 stop bit.",
+          "control_enabled": "Enable only if you intentionally want Home Assistant to write settings. It never enables Modbus control automatically."
         }
       }
     },
     "error": {
       "cannot_connect": "Failed to connect to BRINK device. Please check: 1) Serial port path is correct, 2) USB to RS485 converter is connected, 3) Slave ID matches device setting (default: 20), 4) Wall controller is disconnected. Check logs for detailed error message.",
+      "invalid_connection_type": "Select a supported connection type.",
+      "invalid_input": "Check the connection settings, host, TCP port, and slave ID.",
+      "invalid_response": "The gateway connected, but the BRINK did not accept the read-only appliance-type request.",
       "unknown": "Unexpected error occurred. Check Home Assistant logs for details."
     },
     "abort": {

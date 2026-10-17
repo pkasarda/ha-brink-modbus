@@ -11,26 +11,26 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
+    CONCENTRATION_PARTS_PER_MILLION,
     PERCENTAGE,
+    REVOLUTIONS_PER_MINUTE,
     UnitOfPressure,
     UnitOfTemperature,
-    REVOLUTIONS_PER_MINUTE,
-    CONCENTRATION_PARTS_PER_MILLION,
     UnitOfTime,
     UnitOfVolumeFlowRate,
 )
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
-    DOMAIN,
-    INPUT_REGISTERS,
-    HOLDING_REGISTERS,
-    BYPASS_STATE_MAP,
-    FILTER_STATE_MAP,
-    PREHEATER_STATE_MAP,
     BYPASS_MODE_MAP,
+    BYPASS_STATE_MAP,
+    DOMAIN,
+    FILTER_STATE_MAP,
+    HOLDING_REGISTERS,
+    INPUT_REGISTERS,
     POWER_SWITCH_MAP,
+    PREHEATER_STATE_MAP,
     SENSOR_ICONS,
 )
 from .coordinator import BrinkCoordinator

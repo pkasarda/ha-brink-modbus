@@ -1,0 +1,30 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Pripojenie BRINK Modbus",
+        "description": "Vyberte, ako sa Home Assistant pripojí k jednotke BRINK.",
+        "data": {"connection_type": "Typ pripojenia"}
+      },
+      "connection": {
+        "title": "Nastavenie pripojenia BRINK",
+        "description": "Režim iba monitorovania je bezpečný predvolený stav a nezapisuje do jednotky.",
+        "data": {
+          "host": "Hostiteľ alebo IP adresa brány",
+          "port": "Port alebo sériové zariadenie",
+          "slave_id": "Modbus Slave ID",
+          "baudrate": "Prenosová rýchlosť",
+          "model": "Model BRINK",
+          "control_enabled": "Povoliť zapisovateľné ovládanie"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Nedá sa pripojiť k zariadeniu BRINK Modbus.",
+      "invalid_input": "Skontrolujte nastavenie pripojenia.",
+      "invalid_response": "Brána sa pripojila, ale BRINK odmietol čítanie registra.",
+      "unknown": "Neočakávaná chyba. Skontrolujte protokol Home Assistant."
+    },
+    "abort": {"already_configured": "Zariadenie je už nakonfigurované"}
+  }
+}

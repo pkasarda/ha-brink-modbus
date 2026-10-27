@@ -11,7 +11,6 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
-    CONCENTRATION_PARTS_PER_MILLION,
     PERCENTAGE,
     REVOLUTIONS_PER_MINUTE,
     UnitOfPressure,
@@ -110,7 +109,8 @@ class BrinkSensor(BrinkEntity, SensorEntity):
                 self._attr_native_unit_of_measurement = UnitOfPressure.PA
                 self._attr_device_class = SensorDeviceClass.PRESSURE
             elif config["unit"] == "ppm":
-                self._attr_native_unit_of_measurement = CONCENTRATION_PARTS_PER_MILLION
+                # CONCENTRATION_PARTS_PER_MILLION is deprecated and UnitOfRatio is missing in older HA.
+                self._attr_native_unit_of_measurement = "ppm"
                 self._attr_device_class = SensorDeviceClass.CO2
             elif config["unit"] == "RPM":
                 self._attr_native_unit_of_measurement = REVOLUTIONS_PER_MINUTE
@@ -142,8 +142,9 @@ class BrinkSensor(BrinkEntity, SensorEntity):
         self._attr_icon = self._get_icon()
         
         # Add software version to device info
-        if coordinator.data:
-            self._attr_device_info["sw_version"] = coordinator.data.get("software_version")
+        if coordinator.data and coordinator.data.get("software_version") is not None:
+            # The device registry requires a string (an int is rejected from HA 2026.12).
+            self._attr_device_info["sw_version"] = str(coordinator.data["software_version"])
 
     def _get_icon(self) -> str:
         """Get icon for sensor."""

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.7.3 (2026-10-27)
 - Brand images in `brand/` (icon, logo, and dark variants), so Home Assistant 2026.3+ and HACS show the BRINK logo. The unused root `icon.png` was removed.
 - Docs: AGENTS.md, docs/architecture.md, docs/releasing.md, CHANGELOG.md.
 

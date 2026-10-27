@@ -1,9 +1,14 @@
 set_bypass_mode:
   name: Set bypass mode
   description: Set the bypass mode for a BRINK HRU with controls explicitly enabled.
-  target:
-    device:
   fields:
+    config_entry_id:
+      name: BRINK unit
+      description: The BRINK config entry to use. Defaults to the first configured unit.
+      required: false
+      selector:
+        config_entry:
+          integration: brink_modbus
     mode:
       name: Bypass mode
       description: The bypass mode to set
@@ -18,9 +23,14 @@ set_bypass_mode:
 set_flow_speed:
   name: Set flow speed
   description: Set the target flow speed after explicitly selecting Flow Control mode. Use 0 or the documented 50–model maximum range.
-  target:
-    device:
   fields:
+    config_entry_id:
+      name: BRINK unit
+      description: The BRINK config entry to use. Defaults to the first configured unit.
+      required: false
+      selector:
+        config_entry:
+          integration: brink_modbus
     speed:
       name: Flow speed
       description: Target flow speed in m³/h
@@ -35,9 +45,14 @@ set_flow_speed:
 set_power_mode:
   name: Set power mode
   description: Set the power switch position after explicitly selecting Switch Control mode.
-  target:
-    device:
   fields:
+    config_entry_id:
+      name: BRINK unit
+      description: The BRINK config entry to use. Defaults to the first configured unit.
+      required: false
+      selector:
+        config_entry:
+          integration: brink_modbus
     mode:
       name: Power mode
       description: The power mode to set
@@ -53,11 +68,23 @@ set_power_mode:
 reset_device:
   name: Reset device
   description: Reset a BRINK HRU with controls explicitly enabled (use with caution).
-  target:
-    device:
+  fields:
+    config_entry_id:
+      name: BRINK unit
+      description: The BRINK config entry to use. Defaults to the first configured unit.
+      required: false
+      selector:
+        config_entry:
+          integration: brink_modbus
 
 read_all_registers:
   name: Read all registers
   description: Read all Modbus registers for diagnostics (returns data as event)
-  target:
-    device:
+  fields:
+    config_entry_id:
+      name: BRINK unit
+      description: The BRINK config entry to use. Defaults to the first configured unit.
+      required: false
+      selector:
+        config_entry:
+          integration: brink_modbus

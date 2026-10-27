@@ -24,10 +24,12 @@ SERVICE_SET_POWER_MODE = "set_power_mode"
 SERVICE_RESET_DEVICE = "reset_device"
 SERVICE_READ_ALL_REGISTERS = "read_all_registers"
 
-SET_BYPASS_MODE_SCHEMA = vol.Schema({vol.Required("mode"): vol.In(["automatic", "closed", "open"])})
+# Every service optionally targets one config entry; without it the first BRINK entry is used.
+ENTRY_SCHEMA = vol.Schema({vol.Optional("config_entry_id"): str})
+SET_BYPASS_MODE_SCHEMA = ENTRY_SCHEMA.extend({vol.Required("mode"): vol.In(["automatic", "closed", "open"])})
 # Model-specific limits are checked after the target coordinator is known.
-SET_FLOW_SPEED_SCHEMA = vol.Schema({vol.Required("speed"): vol.All(int, vol.Range(min=0, max=400))})
-SET_POWER_MODE_SCHEMA = vol.Schema({vol.Required("mode"): vol.In(["absence", "low", "normal", "high"])})
+SET_FLOW_SPEED_SCHEMA = ENTRY_SCHEMA.extend({vol.Required("speed"): vol.All(int, vol.Range(min=0, max=400))})
+SET_POWER_MODE_SCHEMA = ENTRY_SCHEMA.extend({vol.Required("mode"): vol.In(["absence", "low", "normal", "high"])})
 
 
 def _get_coordinator(hass: HomeAssistant, call: ServiceCall) -> BrinkCoordinator:
@@ -136,8 +138,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     hass.services.async_register(DOMAIN, SERVICE_SET_BYPASS_MODE, async_set_bypass_mode, schema=SET_BYPASS_MODE_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_SET_FLOW_SPEED, async_set_flow_speed, schema=SET_FLOW_SPEED_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_SET_POWER_MODE, async_set_power_mode, schema=SET_POWER_MODE_SCHEMA)
-    hass.services.async_register(DOMAIN, SERVICE_RESET_DEVICE, async_reset_device)
-    hass.services.async_register(DOMAIN, SERVICE_READ_ALL_REGISTERS, async_read_all_registers)
+    hass.services.async_register(DOMAIN, SERVICE_RESET_DEVICE, async_reset_device, schema=ENTRY_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_READ_ALL_REGISTERS, async_read_all_registers, schema=ENTRY_SCHEMA)
 
 
 async def async_unload_services(hass: HomeAssistant) -> None:

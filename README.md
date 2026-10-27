@@ -105,3 +105,7 @@ python -m compileall -q custom_components
 ```
 
 Tests use mocked Modbus clients; no physical gateway or BRINK unit is exercised by the automated suite.
+
+## License
+
+MIT, see [LICENSE](LICENSE). Modbus TCP support contributed by Robin Kolk.

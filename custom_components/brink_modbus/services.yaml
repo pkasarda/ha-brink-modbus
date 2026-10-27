@@ -27,7 +27,6 @@ set_flow_speed:
       required: true
       selector:
         number:
-          min: 50
           min: 0
           max: 400
           step: 5

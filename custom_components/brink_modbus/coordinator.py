@@ -104,6 +104,7 @@ class BrinkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         super().__init__(
             hass,
             _LOGGER,
+            config_entry=entry,
             name=DOMAIN,
             update_interval=timedelta(seconds=SCAN_INTERVAL_FAST),
         )

@@ -15,6 +15,7 @@ from pymodbus.exceptions import ConnectionException, ModbusException, ModbusIOEx
 from pymodbus.pdu import ExceptionResponse
 
 from .const import (
+    CONF_AUTO_CONTROL_MODE,
     CONF_CONTROL_ENABLED,
     CONF_MODEL,
     CONF_SERIAL_PORT,
@@ -75,6 +76,12 @@ class BrinkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Entries created before monitoring-only mode deliberately preserve
         # their ability to control the unit. New entries store False explicitly.
         self.control_enabled = bool(entry.data.get(CONF_CONTROL_ENABLED, True))
+        # Older releases switched register 8000 automatically before writing a
+        # flow or switch target, and automations rely on that to retake control
+        # after a power loss resets 8000 to Disabled. Keep it for those entries.
+        self.auto_control_mode = self.control_enabled and bool(
+            entry.data.get(CONF_AUTO_CONTROL_MODE, True)
+        )
         self.client = create_modbus_client(entry.data)
         self._transaction_lock = asyncio.Lock()
         self._last_connection_error: str | None = None
@@ -249,6 +256,34 @@ class BrinkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # This is intentionally outside the lock; async_request_refresh invokes
         # _async_update_data, which acquires the same lock.
         await self.async_request_refresh()
+        return True
+
+    async def async_ensure_control_mode(self, mode: int) -> bool:
+        """Return True when register 8000 is in ``mode`` before a target write.
+
+        Writes 8000 only when automatic control-mode switching is enabled for
+        this entry; otherwise the caller must refuse the target write.
+        """
+        current = self.data.get("modbus_control") if self.data else None
+        if current == mode:
+            return True
+        if not self.auto_control_mode:
+            _LOGGER.warning(
+                "Register 8000 is %s, %s required and automatic switching is disabled",
+                current,
+                mode,
+            )
+            return False
+        _LOGGER.info("Switching BRINK Modbus control mode from %s to %s", current, mode)
+        if not await self.async_write_register(
+            HOLDING_REGISTERS["modbus_control"]["address"], mode
+        ):
+            _LOGGER.error("Failed to switch BRINK Modbus control mode to %s", mode)
+            return False
+        if self.data is not None:
+            self.data["modbus_control"] = mode
+        # The unit needs a moment before it accepts the target register.
+        await asyncio.sleep(0.5)
         return True
 
     async def async_read_all_registers(self) -> dict[str, Any]:

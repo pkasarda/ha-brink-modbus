@@ -82,7 +82,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             raise ServiceValidationError(
                 f"Flow speed must be 0 or between 50 and {maximum} m³/h for this model"
             )
-        if not coordinator.data or coordinator.data.get("modbus_control") != 2:
+        if not await coordinator.async_ensure_control_mode(2):
             raise ServiceValidationError(
                 "Set Modbus Control Mode to Flow Control explicitly before setting flow speed"
             )
@@ -94,7 +94,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
     async def async_set_power_mode(call: ServiceCall) -> None:
         coordinator = _get_coordinator(hass, call)
-        if not coordinator.data or coordinator.data.get("modbus_control") != 1:
+        if not await coordinator.async_ensure_control_mode(1):
             raise ServiceValidationError(
                 "Set Modbus Control Mode to Switch Control explicitly before setting power mode"
             )

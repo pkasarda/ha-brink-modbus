@@ -20,14 +20,16 @@
           "slave_id": "Modbus slave ID",
           "baudrate": "Baudrate",
           "model": "BRINK model",
-          "control_enabled": "Enable writable controls"
+          "control_enabled": "Enable writable controls",
+          "auto_control_mode": "Switch Modbus control mode automatically"
         },
         "data_description": {
           "host": "Required for TCP gateway modes.",
           "port": "TCP port for gateways, or serial device path such as /dev/ttyUSB0.",
           "slave_id": "BRINK Modbus address, normally 20.",
           "baudrate": "BRINK default: 19200, 8 data bits, even parity, 1 stop bit.",
-          "control_enabled": "Enable only if you intentionally want Home Assistant to write settings. It never enables Modbus control automatically."
+          "control_enabled": "Enable only if you intentionally want Home Assistant to write settings. It never enables Modbus control automatically.",
+          "auto_control_mode": "When enabled, setting a flow target or switch position first writes the matching Modbus control mode (register 8000). This lets Home Assistant retake control after a power loss resets the unit to Disabled."
         }
       }
     },

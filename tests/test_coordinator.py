@@ -90,11 +90,12 @@ def _make_coordinator(
     tcp_data: dict[str, Any],
     *,
     control_enabled: bool = False,
+    extra: dict[str, Any] | None = None,
 ) -> BrinkCoordinator:
     monkeypatch.setattr(coordinator_module, "create_modbus_client", lambda data: client)
     return BrinkCoordinator(
         FakeHass(),
-        FakeEntry({**tcp_data, "control_enabled": control_enabled}),
+        FakeEntry({**tcp_data, "control_enabled": control_enabled, **(extra or {})}),
     )
 
 
@@ -162,6 +163,51 @@ async def test_explicit_control_write_uses_slave_and_refreshes_without_deadlock(
 
     assert await asyncio.wait_for(coordinator.async_write_register(8000, 0), timeout=1)
     assert client.write_calls == [(8000, 0, 20)]
+
+
+@pytest.mark.asyncio
+async def test_auto_control_mode_writes_8000_once_before_target(
+    monkeypatch: pytest.MonkeyPatch, tcp_data: dict[str, Any]
+) -> None:
+    client = Client()
+    coordinator = _make_coordinator(
+        monkeypatch, client, tcp_data, control_enabled=True, extra={"auto_control_mode": True}
+    )
+    coordinator.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+    monkeypatch.setattr(coordinator_module.asyncio, "sleep", AsyncMock())
+    coordinator.data = {"modbus_control": 0}
+
+    assert await coordinator.async_ensure_control_mode(2)
+    assert await coordinator.async_ensure_control_mode(2)
+    assert client.write_calls == [(8000, 2, 20)]
+
+
+@pytest.mark.asyncio
+async def test_auto_control_mode_off_refuses_without_writing(
+    monkeypatch: pytest.MonkeyPatch, tcp_data: dict[str, Any]
+) -> None:
+    client = Client()
+    coordinator = _make_coordinator(
+        monkeypatch, client, tcp_data, control_enabled=True, extra={"auto_control_mode": False}
+    )
+    coordinator.data = {"modbus_control": 0}
+
+    assert not await coordinator.async_ensure_control_mode(2)
+    assert client.write_calls == []
+
+
+def test_auto_control_mode_defaults(
+    monkeypatch: pytest.MonkeyPatch, tcp_data: dict[str, Any]
+) -> None:
+    legacy = {key: value for key, value in tcp_data.items() if key != "control_enabled"}
+    monkeypatch.setattr(coordinator_module, "create_modbus_client", lambda data: Client())
+
+    # Entries from before monitoring-only mode keep both writes and auto-switching.
+    assert BrinkCoordinator(FakeHass(), FakeEntry(legacy)).auto_control_mode
+    # Monitoring-only entries never switch the control mode.
+    assert not BrinkCoordinator(
+        FakeHass(), FakeEntry({**tcp_data, "auto_control_mode": True})
+    ).auto_control_mode
 
 
 @pytest.mark.asyncio

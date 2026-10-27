@@ -118,24 +118,18 @@ class BrinkFlowSetpointNumber(BrinkControlEntity, NumberEntity):
 
     @property
     def available(self) -> bool:
-        """The device accepts 8002 only in explicitly selected flow mode."""
+        """The device accepts 8002 only in flow mode, unless it may switch 8000 itself."""
+        if not super().available or self.coordinator.data is None:
+            return False
         return (
-            super().available
-            and self.coordinator.data is not None
-            and self.coordinator.data.get("modbus_control") == 2
+            self.coordinator.auto_control_mode
+            or self.coordinator.data.get("modbus_control") == 2
         )
 
     async def async_set_native_value(self, value: float) -> None:
         """Set the value."""
-        # Brink requires an explicit Flow Control mode change before register
-        # 8002 accepts a flow target. Do not change 8000 as a side effect.
-        current_control_mode = self.coordinator.data.get("modbus_control") if self.coordinator.data else None
-        
-        if current_control_mode != 2:
-            _LOGGER.warning(
-                "Flow setpoint requires explicit Flow Control mode; current mode is %s",
-                current_control_mode,
-            )
+        # Register 8002 accepts a flow target only in Flow Control mode (2).
+        if not await self.coordinator.async_ensure_control_mode(2):
             return
         
         success = await self.coordinator.async_write_register(

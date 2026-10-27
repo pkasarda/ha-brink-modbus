@@ -19,7 +19,8 @@
           "slave_id": "Modbus Slave ID",
           "baudrate": "Prędkość transmisji",
           "model": "Model BRINK",
-          "control_enabled": "Włącz sterowanie z zapisem"
+          "control_enabled": "Włącz sterowanie z zapisem",
+          "auto_control_mode": "Automatycznie przełączaj tryb sterowania Modbus"
         }
       }
     },

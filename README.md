@@ -14,11 +14,11 @@ Supported models are Flair 325, Flair 325 Plus, Flair 350, and Flair 400.
 
 The normal choice for a Waveshare Modbus gateway is **Modbus TCP gateway**. Its Modbus TCP-to-RTU mode accepts standard Modbus TCP frames on port 502 and performs the RTU conversion itself. Do not choose RTU-over-TCP for this mode.
 
-Existing serial entries do not need migration: an entry without `connection_type` continues to use serial RTU, with the same config-entry and entity identifiers. Existing entries retain control access for backwards compatibility; new entries begin in monitoring-only mode. Automatic changes to register 8000 have been removed for every entry, so older automations must select the required control mode explicitly.
+Existing serial entries do not need migration: an entry without `connection_type` continues to use serial RTU, with the same config-entry and entity identifiers. Existing entries retain control access for backwards compatibility; new entries begin in monitoring-only mode. Existing entries also keep **automatic control-mode switching**: setting the flow setpoint (or the power switch position) first writes the matching register 8000 mode, so automations retake control after a power loss resets the unit to Disabled. New entries choose this with the *Switch Modbus control mode automatically* option (off by default); with it off, select the required control mode explicitly.
 
 ## Safety and autonomous CO₂ control
 
-New installations are monitoring-only by default. Monitoring reads sensors and holding-register state, but never writes register 8000 or any other register. Setup validation also performs one read-only input-register request only. Startup, reconnects, and polling do not write to the unit.
+New installations are monitoring-only by default. Monitoring reads sensors and holding-register state, but never writes register 8000 or any other register. Register 8000 is only ever written by a user action: the Modbus Control Mode select, or a flow/switch write with automatic control-mode switching enabled. Setup validation also performs one read-only input-register request only. Startup, reconnects, and polling do not write to the unit.
 
 This matters when BRINK wireless CO₂ sensors are fitted: with register 8000 left at `0`, the Flair remains responsible for its own ventilation regulation if Home Assistant, the network, or the gateway is offline.
 
@@ -61,7 +61,7 @@ Transparent TCP is different: it relays serial bytes and expects RTU framing, in
 
 ## Install and configure
 
-1. In HACS, open **Integrations**, choose the menu, select **Custom repositories**, and add `https://github.com/kloknibor/ha-brink-modbus` as an **Integration** repository.
+1. In HACS, open **Integrations**, choose the menu, select **Custom repositories**, and add `https://github.com/pkasarda/ha-brink-modbus` as an **Integration** repository.
 2. Install **BRINK Modbus** through HACS and restart Home Assistant.
 3. Open **Settings → Devices & services → Add integration**, then select **BRINK Modbus**.
 4. Select **Modbus TCP Gateway**.

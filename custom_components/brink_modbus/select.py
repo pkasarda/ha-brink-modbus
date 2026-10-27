@@ -107,11 +107,10 @@ class BrinkPowerSwitchSelect(BrinkControlEntity, SelectEntity):
         if not super().available or self.coordinator.data is None:
             return False
         
-        control_mode = self.coordinator.data.get("modbus_control")
-        if control_mode != 1:
-            return False
-        
-        return super().available
+        return (
+            self.coordinator.auto_control_mode
+            or self.coordinator.data.get("modbus_control") == 1
+        )
 
     @property
     def current_option(self) -> str | None:
@@ -150,15 +149,8 @@ class BrinkPowerSwitchSelect(BrinkControlEntity, SelectEntity):
             _LOGGER.error("Invalid power switch option: %s", option)
             return
         
-        # Brink requires an explicit Switch Control mode change before register
-        # 8001 accepts a switch position. Do not change 8000 as a side effect.
-        current_control_mode = self.coordinator.data.get("modbus_control") if self.coordinator.data else None
-        
-        if current_control_mode != 1:
-            _LOGGER.warning(
-                "Power switch requires explicit Switch Control mode; current mode is %s",
-                current_control_mode,
-            )
+        # Register 8001 accepts a switch position only in Switch Control mode (1).
+        if not await self.coordinator.async_ensure_control_mode(1):
             return
             
         # Write to holding register

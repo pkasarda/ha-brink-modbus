@@ -19,7 +19,8 @@
           "slave_id": "Modbus Slave ID",
           "baudrate": "Prenosová rýchlosť",
           "model": "BRINK model",
-          "control_enabled": "Povoliť zapisovateľné ovládanie"
+          "control_enabled": "Povoliť zapisovateľné ovládanie",
+          "auto_control_mode": "Automaticky prepínať režim Modbus riadenia"
         }
       }
     },

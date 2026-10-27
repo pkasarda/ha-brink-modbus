@@ -24,6 +24,7 @@ DEFAULT_STOPBITS = 1
 DEFAULT_TCP_PORT = 502
 DEFAULT_CONNECTION_TYPE = "tcp"
 DEFAULT_CONTROL_ENABLED = False
+DEFAULT_AUTO_CONTROL_MODE = False
 
 # Configuration entry keys.  ``connection_type`` is deliberately optional when
 # reading an entry: releases before TCP support only stored serial settings.
@@ -33,6 +34,7 @@ CONF_SLAVE_ID = "slave_id"
 CONF_BAUDRATE = "baudrate"
 CONF_MODEL = "model"
 CONF_CONTROL_ENABLED = "control_enabled"
+CONF_AUTO_CONTROL_MODE = "auto_control_mode"
 
 CONNECTION_TYPE_SERIAL = "serial"
 CONNECTION_TYPE_TCP = "tcp"

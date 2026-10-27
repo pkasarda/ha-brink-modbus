@@ -26,6 +26,7 @@ from pymodbus.exceptions import ConnectionException, ModbusException, ModbusIOEx
 from pymodbus.pdu import ExceptionResponse
 
 from .const import (
+    CONF_AUTO_CONTROL_MODE,
     CONF_BAUDRATE,
     CONF_CONNECTION_TYPE,
     CONF_CONTROL_ENABLED,
@@ -34,6 +35,7 @@ from .const import (
     CONNECTION_TYPE_RTU_OVER_TCP,
     CONNECTION_TYPE_SERIAL,
     CONNECTION_TYPE_TCP,
+    DEFAULT_AUTO_CONTROL_MODE,
     DEFAULT_BAUDRATE,
     DEFAULT_CONNECTION_TYPE,
     DEFAULT_CONTROL_ENABLED,
@@ -79,6 +81,7 @@ def _common_connection_schema() -> dict[Any, Any]:
         ),
         vol.Required(CONF_MODEL, default="flair_400"): _model_selector(),
         vol.Required(CONF_CONTROL_ENABLED, default=DEFAULT_CONTROL_ENABLED): BooleanSelector(),
+        vol.Required(CONF_AUTO_CONTROL_MODE, default=DEFAULT_AUTO_CONTROL_MODE): BooleanSelector(),
     }
 
 

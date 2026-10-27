@@ -145,6 +145,7 @@ automation:
 - The 4-position wall switch and Modbus control are mutually exclusive.
 - Firmware and options differ, so some entities, such as the CO₂ status sensors or the geo exchanger, can stay unknown on your unit.
 - The flow range of a Flair 350 is from the documentation and has not been tested on a unit.
+- **Frost Fan Reduction** reports 100 % without frost on firmware S2.01.21, although the BRINK document defines 100 % as maximum reduction. Read it together with **Frost Status**.
 
 ## Troubleshooting
 

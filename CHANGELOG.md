@@ -1,12 +1,13 @@
 # Changelog
 
-## 2.8.0 (unreleased)
+## 2.8.0 (2026-10-27)
 - New sensors (from the BRINK UWA2-B register map): active function, ventilation mode, wall-switch position, supply/exhaust fan status, frost status, frost heater power, frost fan reduction, operating time (32-bit), CO₂ sensor status 1–4 and fan control type. The last two are disabled by default.
 - New controls: standby switch (8003), Reset Filter Warning button (8010), filter warning days, bypass temperatures (dwelling, outside, hysteresis).
 - Fix: Software Version showed serial-number digits (4012); it now reads 4000-4002. The BCD serial number and the software version appear in the device info.
 - Fix: geo heat exchanger temperatures are tenths of °C (shown 50/250 instead of 5.0/25.0 °C).
 - Robustness: a register the firmware rejects no longer hides the other registers in the same block, and it is skipped on later polls.
 - Diagnostics download (host and serial redacted); entity categories for diagnostic and configuration entities; `quality_scale.yaml`.
+- Verified on a Flair 325 Plus (firmware S2.01.21, RS485): every new register is supported.
 - README rewritten: supported devices, configuration fields, entities, actions, data updates, examples, limitations, removal.
 
 ## 2.7.3 (2026-10-27)

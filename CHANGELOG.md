@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+- Brand images in `brand/` (icon, logo, and dark variants), so Home Assistant 2026.3+ and HACS show the BRINK logo. The unused root `icon.png` was removed.
+- Docs: AGENTS.md, docs/architecture.md, docs/releasing.md, CHANGELOG.md.
+
 ## 2.7.2 (2026-10-27)
 - The coordinator passes `config_entry` explicitly (required by current Home Assistant).
 - CI tests against Home Assistant 2026.10 on Python 3.14; `hacs.json` declares a minimum Home Assistant version of 2025.1.0.

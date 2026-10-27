@@ -10,5 +10,5 @@
 
 ## CI notes
 - Pin the `homeassistant` test version to a release that matches the Python version in `.github/workflows/validate.yml`. HA 2026.x needs Python ≥ 3.14.2, and Dependabot bumps that ignore this cannot install.
-- The HACS action runs with `ignore: brands`, because the icon ships in the integration folder.
+- Brand images live in `custom_components/brink_modbus/brand/` (HA 2026.3+ serves them; HACS shows them in the store). `dark_*` variants have white text on a transparent background.
 - HACS does not delete files that a release no longer ships. Mention removed files in the release notes.

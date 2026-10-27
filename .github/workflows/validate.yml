@@ -20,9 +20,6 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
-          # Custom integration icon is shipped in the integration folder,
-          # not in the home-assistant/brands repository.
-          ignore: brands
 
   tests:
     runs-on: ubuntu-latest

@@ -14,6 +14,7 @@ from .const import (
     HOLDING_REGISTERS,
     MODBUS_CONTROL_MAP,
     POWER_SWITCH_MAP,
+    map_key,
 )
 from .coordinator import BrinkCoordinator
 from .entity import BrinkControlEntity
@@ -66,25 +67,14 @@ class BrinkBypassModeSelect(BrinkControlEntity, SelectEntity):
 
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""
-        # Find the numeric value for the selected option
-        mode_value = None
-        for value, text in BYPASS_MODE_MAP.items():
-            if text == option:
-                mode_value = value
-                break
+        mode_value = map_key(BYPASS_MODE_MAP, option)
                 
         if mode_value is None:
             _LOGGER.error("Invalid bypass mode option: %s", option)
             return
             
         # Write to holding register
-        success = await self.coordinator.async_write_register(
-            HOLDING_REGISTERS["bypass_mode_setting"]["address"],
-            mode_value
-        )
-        
-        if not success:
-            _LOGGER.error("Failed to set bypass mode to %s", option)
+        await self._async_write(HOLDING_REGISTERS["bypass_mode_setting"]["address"], mode_value)
 
 class BrinkPowerSwitchSelect(BrinkControlEntity, SelectEntity):
     """BRINK power switch position select entity."""
@@ -138,31 +128,17 @@ class BrinkPowerSwitchSelect(BrinkControlEntity, SelectEntity):
 
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""
-        # Find the numeric value for the selected option
-        switch_value = None
-        for value, text in POWER_SWITCH_MAP.items():
-            if text == option:
-                switch_value = value
-                break
+        switch_value = map_key(POWER_SWITCH_MAP, option)
                 
         if switch_value is None:
             _LOGGER.error("Invalid power switch option: %s", option)
             return
         
         # Register 8001 accepts a switch position only in Switch Control mode (1).
-        if not await self.coordinator.async_ensure_control_mode(1):
-            return
+        await self._async_ensure_control_mode(1)
             
         # Write to holding register
-        success = await self.coordinator.async_write_register(
-            HOLDING_REGISTERS["power_switch_position"]["address"],
-            switch_value
-        )
-        
-        if not success:
-            _LOGGER.error("Failed to set power switch to %s", option)
-        else:
-            _LOGGER.info("Successfully set power switch to %s (value: %s)", option, switch_value)
+        await self._async_write(HOLDING_REGISTERS["power_switch_position"]["address"], switch_value)
 
 class BrinkModbusControlSelect(BrinkControlEntity, SelectEntity):
     """BRINK Modbus control mode select entity."""
@@ -194,22 +170,11 @@ class BrinkModbusControlSelect(BrinkControlEntity, SelectEntity):
 
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""
-        # Find the numeric value for the selected option
-        control_value = None
-        for value, text in MODBUS_CONTROL_MAP.items():
-            if text == option:
-                control_value = value
-                break
+        control_value = map_key(MODBUS_CONTROL_MAP, option)
                 
         if control_value is None:
             _LOGGER.error("Invalid modbus control option: %s", option)
             return
             
         # Write to holding register
-        success = await self.coordinator.async_write_register(
-            HOLDING_REGISTERS["modbus_control"]["address"],
-            control_value
-        )
-        
-        if not success:
-            _LOGGER.error("Failed to set modbus control to %s", option)
+        await self._async_write(HOLDING_REGISTERS["modbus_control"]["address"], control_value)

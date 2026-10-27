@@ -88,14 +88,15 @@ class Client:
 class RejectingClient(Client):
     """Answer a Modbus exception for any request that covers a rejected address."""
 
-    def __init__(self, rejected: set[int]) -> None:
+    def __init__(self, rejected: set[int], exception_code: int = 2) -> None:
         super().__init__()
         self.rejected = rejected
+        self.exception_code = exception_code
 
     async def read_input_registers(self, address: int, *, count: int, device_id: int) -> Any:
         if self.rejected & set(range(address, address + count)):
             self.input_calls.append((address, count, device_id))
-            return ExceptionResponse(4, 2)
+            return ExceptionResponse(4, self.exception_code)
         return await super().read_input_registers(address, count=count, device_id=device_id)
 
 
@@ -180,6 +181,52 @@ async def test_unsupported_register_does_not_hide_its_block(
     await coordinator._async_update_data()
     assert coordinator.unsupported_registers == {4030}
     assert all(address != 4030 for address, _, _ in client.input_calls)
+
+
+@pytest.mark.asyncio
+async def test_busy_reply_is_retried_and_not_remembered(
+    monkeypatch: pytest.MonkeyPatch, tcp_data: dict[str, Any]
+) -> None:
+    # Exception code 6 = "device busy", e.g. while the unit boots after a power loss.
+    client = RejectingClient(rejected={4030, 4031, 4032}, exception_code=6)
+    coordinator = _make_coordinator(monkeypatch, client, tcp_data)
+
+    await coordinator._async_update_data()
+    assert coordinator.unsupported_registers == set()
+
+    client.rejected = set()
+    data = await coordinator._async_update_data()
+    assert data["supply_volume_actual"] == 4032
+
+
+@pytest.mark.asyncio
+async def test_reconnect_probes_unsupported_registers_again(
+    monkeypatch: pytest.MonkeyPatch, tcp_data: dict[str, Any]
+) -> None:
+    client = RejectingClient(rejected={4030})
+    coordinator = _make_coordinator(monkeypatch, client, tcp_data)
+    await coordinator._async_update_data()
+    assert coordinator.unsupported_registers == {4030}
+
+    client.connected = False
+    await coordinator._async_update_data()
+
+    assert coordinator.unsupported_registers == {4030}  # still rejected, so re-learned
+    assert any(address == 4030 for address, _, _ in client.input_calls)
+
+
+@pytest.mark.asyncio
+async def test_register_dump_never_reads_command_registers(
+    monkeypatch: pytest.MonkeyPatch, tcp_data: dict[str, Any]
+) -> None:
+    client = Client()
+    coordinator = _make_coordinator(monkeypatch, client, tcp_data)
+
+    dump = await coordinator.async_read_all_registers()
+
+    read = {a + o for a, c, _ in client.holding_calls for o in range(c)}
+    assert dump["holding_modbus_control"] == 8000
+    assert not read & {7991, 8010, 8011}
 
 
 def test_serial_number_and_software_version_are_decoded() -> None:

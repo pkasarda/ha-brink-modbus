@@ -91,13 +91,7 @@ class BrinkFlowLevelNumber(BrinkControlEntity, NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Set the value."""
-        success = await self.coordinator.async_write_register(
-            self._config["address"],
-            int(value)
-        )
-        
-        if not success:
-            _LOGGER.error("Failed to set %s to %s", self._setting_key, value)
+        await self._async_write(self._config["address"], int(value))
 
 class BrinkFlowSetpointNumber(BrinkControlEntity, NumberEntity):
     """BRINK flow setpoint number entity."""
@@ -140,18 +134,9 @@ class BrinkFlowSetpointNumber(BrinkControlEntity, NumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         """Set the value."""
         # Register 8002 accepts a flow target only in Flow Control mode (2).
-        if not await self.coordinator.async_ensure_control_mode(2):
-            return
+        await self._async_ensure_control_mode(2)
         
-        success = await self.coordinator.async_write_register(
-            self._config["address"],
-            int(value)
-        )
-        
-        if not success:
-            _LOGGER.error("Failed to set flow setpoint to %s", value)
-        else:
-            _LOGGER.info("Successfully set flow setpoint to %s m³/h", value)
+        await self._async_write(self._config["address"], int(value))
 
 class BrinkImbalanceOffsetNumber(BrinkControlEntity, NumberEntity):
     """BRINK imbalance offset number entity."""
@@ -189,13 +174,7 @@ class BrinkImbalanceOffsetNumber(BrinkControlEntity, NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Set the value."""
-        success = await self.coordinator.async_write_register(
-            self._config["address"],
-            int(value)
-        )
-        
-        if not success:
-            _LOGGER.error("Failed to set %s to %s", self._setting_key, value)
+        await self._async_write(self._config["address"], int(value))
 
 class BrinkGeoTemperatureNumber(BrinkControlEntity, NumberEntity):
     """BRINK temperature setting stored in tenths of °C (geo exchanger, bypass)."""
@@ -236,10 +215,7 @@ class BrinkGeoTemperatureNumber(BrinkControlEntity, NumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         """Write the value in tenths of °C."""
         raw = round(value / self._config["scale"])
-        success = await self.coordinator.async_write_register(self._config["address"], raw)
-
-        if not success:
-            _LOGGER.error("Failed to set %s to %s", self._setting_key, value)
+        await self._async_write(self._config["address"], raw)
 
 
 class BrinkFilterWarningDaysNumber(BrinkControlEntity, NumberEntity):
@@ -269,5 +245,4 @@ class BrinkFilterWarningDaysNumber(BrinkControlEntity, NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Set the value."""
-        if not await self.coordinator.async_write_register(self._config["address"], int(value)):
-            _LOGGER.error("Failed to set filter warning days to %s", value)
+        await self._async_write(self._config["address"], int(value))

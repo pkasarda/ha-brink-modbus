@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.8.1 (2026-10-27)
+- Fix: only "illegal data address" (Modbus exception 2) marks a register unsupported. A busy reply, for example while the unit boots after a power loss, no longer hides registers such as the control mode until restart. A reconnect probes all registers again.
+- Fix: a rejected or failed write now raises an error in the UI and in automations instead of only logging it.
+- Fix: adding an already configured unit aborts before the port is opened, including serial entries created before 2.7.
+- New **Reset Device** button. The old Device Reset switch is disabled by default because a bulk `switch.turn_on` restarted the unit.
+- The `read_all_registers` action no longer reads the command registers 8010/8011.
+- The binary sensors that mirror switches (Imbalance Allowed, Geo Heat Exchanger, CO2 Sensor Active) are disabled by default for new installs.
+- Cleanup: unused code and register keys removed; one helper for text-to-value lookups.
+
 ## 2.8.0 (2026-10-27)
 - New sensors (from the BRINK UWA2-B register map): active function, ventilation mode, wall-switch position, supply/exhaust fan status, frost status, frost heater power, frost fan reduction, operating time (32-bit), CO₂ sensor status 1–4 and fan control type. The last two are disabled by default.
 - New controls: standby switch (8003), Reset Filter Warning button (8010), filter warning days, bypass temperatures (dwelling, outside, hysteresis).

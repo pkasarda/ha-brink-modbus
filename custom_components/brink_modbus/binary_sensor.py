@@ -115,6 +115,8 @@ class BrinkImbalanceAllowedBinarySensor(BrinkEntity, BinarySensorEntity):
         
         self._attr_name = "Imbalance Allowed"
         self._attr_unique_id = f"{entry.entry_id}_imbalance_allowed"
+        # Mirrors the switch of the same name; kept for existing installs.
+        self._attr_entity_registry_enabled_default = False
         self._attr_icon = "mdi:scale-balance"
 
     @property
@@ -142,6 +144,8 @@ class BrinkGeoHeatExchangerBinarySensor(BrinkEntity, BinarySensorEntity):
         
         self._attr_name = "Geo Heat Exchanger"
         self._attr_unique_id = f"{entry.entry_id}_geo_heat_exchanger"
+        # Mirrors the switch of the same name; kept for existing installs.
+        self._attr_entity_registry_enabled_default = False
         self._attr_device_class = BinarySensorDeviceClass.HEAT
         self._attr_icon = "mdi:heat-pump"
 
@@ -163,6 +167,8 @@ class BrinkCO2SensorActiveBinarySensor(BrinkEntity, BinarySensorEntity):
         
         self._attr_name = "CO2 Sensor Active"
         self._attr_unique_id = f"{entry.entry_id}_co2_sensor_active"
+        # Mirrors the switch of the same name; kept for existing installs.
+        self._attr_entity_registry_enabled_default = False
         self._attr_device_class = BinarySensorDeviceClass.RUNNING
         self._attr_icon = "mdi:molecule-co2"
 

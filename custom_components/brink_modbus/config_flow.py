@@ -223,6 +223,17 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         if user_input is not None:
             data = {**user_input, CONF_CONNECTION_TYPE: self._connection_type}
+            # Check for a duplicate before opening the port: a configured serial
+            # unit holds the device, so validating first fails as cannot_connect.
+            try:
+                unique_id = connection_unique_id(data)
+            except (KeyError, ValueError):
+                unique_id = None
+            if unique_id is not None:
+                await self.async_set_unique_id(unique_id)
+                self._abort_if_unique_id_configured()
+                if self._legacy_entry_exists(data):
+                    return self.async_abort(reason="already_configured")
             try:
                 info = await validate_input(self.hass, data)
             except ValueError:
@@ -235,8 +246,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected BRINK configuration validation error")
                 errors["base"] = "unknown"
             else:
-                await self.async_set_unique_id(connection_unique_id(data))
-                self._abort_if_unique_id_configured()
                 return self.async_create_entry(title=info["title"], data=data)
 
         schema = connection_schema(self._connection_type)
@@ -247,6 +256,14 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=schema,
             errors=errors,
         )
+
+
+    def _legacy_entry_exists(self, data: dict[str, Any]) -> bool:
+        """Match serial entries created before 2.7, whose unique ID kept the slave ID as a float."""
+        if connection_type(data) != CONNECTION_TYPE_SERIAL:
+            return False
+        legacy = f"{data[CONF_SERIAL_PORT]}_{float(validate_slave_id(data.get('slave_id', DEFAULT_SLAVE_ID)))}"
+        return any(entry.unique_id == legacy for entry in self._async_current_entries())
 
 
 class CannotConnect(HomeAssistantError):

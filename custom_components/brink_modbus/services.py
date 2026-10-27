@@ -13,6 +13,7 @@ from .const import (
     HOLDING_REGISTERS,
     POWER_SWITCH_MAP,
     get_max_airflow,
+    map_key,
 )
 from .coordinator import BrinkCoordinator
 
@@ -32,8 +33,10 @@ SET_FLOW_SPEED_SCHEMA = ENTRY_SCHEMA.extend({vol.Required("speed"): vol.All(int,
 SET_POWER_MODE_SCHEMA = ENTRY_SCHEMA.extend({vol.Required("mode"): vol.In(["absence", "low", "normal", "high"])})
 
 
-def _get_coordinator(hass: HomeAssistant, call: ServiceCall) -> BrinkCoordinator:
-    """Resolve a service target and reject monitoring-only entries clearly."""
+def _get_coordinator(
+    hass: HomeAssistant, call: ServiceCall, *, require_controls: bool = True
+) -> BrinkCoordinator:
+    """Resolve a service target; reject monitoring-only entries for writes."""
     entry_id = call.data.get("config_entry_id")
     if entry_id:
         coordinator = hass.data.get(DOMAIN, {}).get(entry_id)
@@ -48,7 +51,7 @@ def _get_coordinator(hass: HomeAssistant, call: ServiceCall) -> BrinkCoordinator
         )
     if not isinstance(coordinator, BrinkCoordinator):
         raise ServiceValidationError("No BRINK HRU device found")
-    if not coordinator.control_enabled:
+    if require_controls and not coordinator.control_enabled:
         raise ServiceValidationError(
             "Controls are disabled for this BRINK entry; reconfigure it with writable controls enabled"
         )
@@ -57,10 +60,10 @@ def _get_coordinator(hass: HomeAssistant, call: ServiceCall) -> BrinkCoordinator
 
 def _map_value(mapping: dict[int, str], option: str, label: str) -> int:
     """Convert a service value to its documented register encoding."""
-    for value, text in mapping.items():
-        if text.lower() == option:
-            return value
-    raise ServiceValidationError(f"Invalid {label}: {option}")
+    value = map_key(mapping, option)
+    if value is None:
+        raise ServiceValidationError(f"Invalid {label}: {option}")
+    return value
 
 
 async def async_setup_services(hass: HomeAssistant) -> None:
@@ -120,16 +123,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     async def async_read_all_registers(call: ServiceCall) -> None:
         """Diagnostic reads remain available in monitoring-only mode."""
         entry_id = call.data.get("config_entry_id")
-        coordinator = hass.data.get(DOMAIN, {}).get(entry_id) if entry_id else next(
-            (
-                item
-                for item in hass.data.get(DOMAIN, {}).values()
-                if isinstance(item, BrinkCoordinator)
-            ),
-            None,
-        )
-        if not isinstance(coordinator, BrinkCoordinator):
-            raise ServiceValidationError("No BRINK HRU device found")
+        coordinator = _get_coordinator(hass, call, require_controls=False)
         hass.bus.async_fire(
             f"{DOMAIN}_diagnostics",
             {"device_id": entry_id, "registers": await coordinator.async_read_all_registers()},

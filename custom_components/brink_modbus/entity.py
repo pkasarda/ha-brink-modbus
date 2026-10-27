@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, MANUFACTURER, SUPPORTED_MODELS
@@ -40,4 +41,16 @@ class BrinkControlEntity(BrinkEntity):
     def available(self) -> bool:
         """Controls are unavailable until the user explicitly enables them."""
         return self.coordinator.control_enabled and super().available
+
+    async def _async_write(self, address: int, value: int) -> None:
+        """Write one register; raise so the UI and automations see a failure."""
+        if not await self.coordinator.async_write_register(address, value):
+            raise HomeAssistantError(f"BRINK did not accept the write to register {address}")
+
+    async def _async_ensure_control_mode(self, mode: int) -> None:
+        """Make sure register 8000 allows the following write, or raise."""
+        if not await self.coordinator.async_ensure_control_mode(mode):
+            raise HomeAssistantError(
+                f"BRINK Modbus control mode must be {mode}; select it or enable automatic switching"
+            )
 

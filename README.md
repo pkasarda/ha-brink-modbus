@@ -85,10 +85,10 @@ Entities belong to one device per unit. Under **Diagnostics** the device page sh
 | State | Active function, ventilation mode, wall-switch position (Flow Switch Position), bypass state, preheater state and power, frost status, frost heater power, frost fan reduction, filter state, filter dirty, filter usage hours |
 | CO₂ | CO₂ sensors 1–4 (ppm); their status sensors are disabled by default |
 | Controls | Modbus control mode, flow setpoint, power switch position, bypass mode, standby |
-| Settings (configuration) | Flow levels 0–3, imbalance allowed and offsets, bypass temperatures (dwelling, outside, hysteresis), filter warning days, CO₂ sensor mode, geo heat exchanger and its temperatures, Reset Filter Warning button |
+| Settings (configuration) | Flow levels 0–3, imbalance allowed and offsets, bypass temperatures (dwelling, outside, hysteresis), filter warning days, CO₂ sensor mode, geo heat exchanger and its temperatures, Reset Filter Warning and Reset Device buttons |
 | Diagnostics | Software version, device type, serial number words, operating time, fan status, fan control type (disabled by default) |
 
-While writable controls are off, every control and setting is unavailable and all monitoring entities keep working.
+While writable controls are off, every control and setting is unavailable and all monitoring entities keep working. A command the unit rejects shows an error and makes the automation step fail.
 
 ### Control mode (register 8000)
 
@@ -114,7 +114,7 @@ All actions accept an optional `config_entry_id`. Without it they use the first 
 
 ## Data updates
 
-The integration polls every 10 seconds. One lock serialises all bus traffic, so polls and commands never overlap, and contiguous registers are read in one request. A register the unit rejects is skipped until the integration reloads. When the connection fails, the entities become unavailable, a single warning is logged, and the integration reconnects on the next poll.
+The integration polls every 10 seconds. One lock serialises all bus traffic, so polls and commands never overlap, and contiguous registers are read in one request. A register the unit reports as non-existent (Modbus exception 2) is skipped until the next reconnect. Other errors, such as a busy unit, are retried on the next poll. When the connection fails, the entities become unavailable, a single warning is logged, and the integration reconnects on the next poll.
 
 ## Examples
 

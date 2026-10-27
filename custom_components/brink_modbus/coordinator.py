@@ -54,6 +54,10 @@ def _contiguous_blocks(
     return blocks
 
 
+# Modbus exception code 2: the address does not exist on this device.
+ILLEGAL_DATA_ADDRESS = 2
+
+
 def _end_address(config: dict[str, Any]) -> int:
     """Return the first address after a (possibly multi-word) register."""
     return config["address"] + config.get("words", 1)
@@ -159,6 +163,8 @@ class BrinkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Connect a client when needed, with PyModbus' bounded backoff."""
         if getattr(self.client, "connected", False):
             return
+        # A new connection may reach a unit with other firmware; probe everything again.
+        self.unsupported_registers.clear()
         try:
             connected = await self.client.connect()
         except (ConnectionException, OSError, TimeoutError) as err:
@@ -207,7 +213,10 @@ class BrinkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     for item in block:
                         data.update(await self._async_read_block(register_type, [item]))
                     return data
-                self.unsupported_registers.add(address)
+                # Only "illegal data address" means the firmware lacks the register;
+                # busy/other codes (e.g. while booting after a power loss) are retried.
+                if getattr(result, "exception_code", None) == ILLEGAL_DATA_ADDRESS:
+                    self.unsupported_registers.add(address)
                 return {}
             raise _TransportFailure(f"No usable Modbus response at register {address}")
 
@@ -353,7 +362,7 @@ class BrinkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         "input", INPUT_REGISTERS.items()
                     )
                     holding_data = await self._async_read_mapped_registers(
-                        "holding", HOLDING_REGISTERS.items()
+                        "holding", self._polled_holding_registers()
                     )
                 except _TransportFailure:
                     await async_close_client(self.client)

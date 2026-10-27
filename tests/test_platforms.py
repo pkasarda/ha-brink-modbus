@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pytest
+from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.brink_modbus import (
     binary_sensor,
@@ -75,3 +76,46 @@ async def test_diagnostics_redact_host_and_serial() -> None:
     assert result["entry"]["host"] == "**REDACTED**"
     assert result["data"]["serial_number"] == "**REDACTED**"
     assert result["data"]["active_function"] == 12
+
+
+class WritingCoordinator(PlatformCoordinator):
+    """Records writes and can simulate a rejected write."""
+
+    def __init__(self, accept: bool = True) -> None:
+        super().__init__()
+        self.control_enabled = True
+        self.accept = accept
+        self.writes: list[tuple[int, int]] = []
+
+    async def async_write_register(self, address: int, value: int) -> bool:
+        self.writes.append((address, value))
+        return self.accept
+
+
+@pytest.mark.asyncio
+async def test_temperature_settings_are_written_in_tenths() -> None:
+    coordinator = WritingCoordinator()
+    entity = number.BrinkGeoTemperatureNumber(
+        coordinator, FakeEntry({"model": "flair_325_plus"}), "bypass_temperature_dwelling", "x"
+    )
+
+    await entity.async_set_native_value(22.5)
+
+    assert coordinator.writes == [(6101, 225)]
+
+
+@pytest.mark.asyncio
+async def test_rejected_write_raises_for_ui_and_automations() -> None:
+    coordinator = WritingCoordinator(accept=False)
+    entity = number.BrinkFilterWarningDaysNumber(coordinator, FakeEntry({"model": "flair_325_plus"}))
+
+    with pytest.raises(HomeAssistantError):
+        await entity.async_set_native_value(90)
+
+
+def test_map_key_is_case_insensitive() -> None:
+    from custom_components.brink_modbus.const import BYPASS_MODE_MAP, map_key
+
+    assert map_key(BYPASS_MODE_MAP, "open") == 2
+    assert map_key(BYPASS_MODE_MAP, "Closed") == 1
+    assert map_key(BYPASS_MODE_MAP, "sideways") is None

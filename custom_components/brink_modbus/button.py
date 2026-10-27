@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.components.button import ButtonEntity
+from homeassistant.components.button import ButtonDeviceClass, ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
@@ -23,7 +23,9 @@ async def async_setup_entry(
 ) -> None:
     """Set up BRINK HRU button platform."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([BrinkFilterResetButton(coordinator, entry)])
+    async_add_entities(
+        [BrinkFilterResetButton(coordinator, entry), BrinkDeviceResetButton(coordinator, entry)]
+    )
 
 
 class BrinkFilterResetButton(BrinkControlEntity, ButtonEntity):
@@ -40,7 +42,22 @@ class BrinkFilterResetButton(BrinkControlEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         """Write the reset command; the unit clears 8010 itself."""
-        if not await self.coordinator.async_write_register(
-            HOLDING_REGISTERS["filter_reset"]["address"], 1
-        ):
-            _LOGGER.error("Failed to reset the filter warning")
+        await self._async_write(HOLDING_REGISTERS["filter_reset"]["address"], 1)
+
+
+class BrinkDeviceResetButton(BrinkControlEntity, ButtonEntity):
+    """Restart the unit's controller (8011). The unit returns to Modbus control Disabled."""
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_device_class = ButtonDeviceClass.RESTART
+
+    def __init__(self, coordinator: BrinkCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the button."""
+        super().__init__(coordinator, entry)
+        self._attr_name = "Reset Device"
+        self._attr_unique_id = f"{entry.entry_id}_device_reset"
+
+    async def async_press(self) -> None:
+        """Trigger the appliance reset."""
+        _LOGGER.warning("Triggering a user-requested BRINK device reset")
+        await self._async_write(HOLDING_REGISTERS["device_reset"]["address"], 1)

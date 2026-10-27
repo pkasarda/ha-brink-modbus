@@ -60,7 +60,7 @@ async def async_setup_entry(
         if "map" in config:
             entities.append(BrinkMappedSensor(coordinator, entry, sensor_key, config))
             continue
-        entities.append(BrinkSensor(coordinator, entry, sensor_key, config, "input"))
+        entities.append(BrinkSensor(coordinator, entry, sensor_key, config))
 
     # Software version is derived from registers 4000-4002 (kept unique_id).
     entities.append(
@@ -69,7 +69,6 @@ async def async_setup_entry(
             entry,
             "software_version",
             {"unit": None, "category": "diagnostic"},
-            "derived",
         )
     )
     
@@ -81,7 +80,7 @@ async def async_setup_entry(
     for sensor_key in readonly_holdings:
         if sensor_key in HOLDING_REGISTERS:
             config = HOLDING_REGISTERS[sensor_key]
-            entities.append(BrinkSensor(coordinator, entry, sensor_key, config, "holding"))
+            entities.append(BrinkSensor(coordinator, entry, sensor_key, config))
     
     # Add text state sensors (calculated efficiency in templates.yaml for better accuracy)
     entities.extend([
@@ -144,14 +143,12 @@ class BrinkSensor(BrinkEntity, SensorEntity):
         entry: ConfigEntry,
         sensor_key: str,
         config: dict[str, Any],
-        register_type: str,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, entry)
         
         self._sensor_key = sensor_key
         self._config = config
-        self._register_type = register_type
         
         # Set basic attributes with has_entity_name pattern
         self._attr_name = sensor_key.replace('_', ' ').title()

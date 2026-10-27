@@ -147,3 +147,31 @@ async def test_config_flow_rejects_an_existing_unique_id(
     with pytest.raises(AbortFlow, match="already_configured"):
         await flow.async_step_connection(tcp_data)
     assert observed_unique_ids == ["tcp_192.0.2.20_502_20"]
+
+
+@pytest.mark.asyncio
+async def test_legacy_serial_entry_aborts_before_opening_the_port(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    flow = config_flow.ConfigFlow()
+    flow.hass = object()
+    flow._connection_type = "serial"
+
+    async def must_not_validate(_: object, __: dict[str, object]) -> dict[str, object]:
+        raise AssertionError("the configured serial port must not be opened again")
+
+    async def fake_set_unique_id(_: str) -> None:
+        return None
+
+    legacy_entry = Mock(unique_id="/dev/ttyUSB0_20.0")  # pre-2.7 entries stored a float slave ID
+    monkeypatch.setattr(config_flow, "validate_input", must_not_validate)
+    monkeypatch.setattr(flow, "async_set_unique_id", fake_set_unique_id)
+    monkeypatch.setattr(flow, "_abort_if_unique_id_configured", lambda: None)
+    monkeypatch.setattr(flow, "_async_current_entries", lambda: [legacy_entry])
+
+    result = await flow.async_step_connection(
+        {"port": "/dev/ttyUSB0", "baudrate": "19200", "slave_id": 20.0, "model": "flair_325_plus"}
+    )
+
+    assert result["type"] == "abort"
+    assert result["reason"] == "already_configured"

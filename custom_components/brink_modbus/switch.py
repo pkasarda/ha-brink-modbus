@@ -54,23 +54,11 @@ class BrinkImbalanceAllowedSwitch(BrinkControlEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on imbalance allowance."""
-        success = await self.coordinator.async_write_register(
-            HOLDING_REGISTERS["imbalance_allowed"]["address"],
-            1
-        )
-        
-        if not success:
-            _LOGGER.error("Failed to enable imbalance allowance")
+        await self._async_write(HOLDING_REGISTERS["imbalance_allowed"]["address"], 1)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off imbalance allowance."""
-        success = await self.coordinator.async_write_register(
-            HOLDING_REGISTERS["imbalance_allowed"]["address"],
-            0
-        )
-        
-        if not success:
-            _LOGGER.error("Failed to disable imbalance allowance")
+        await self._async_write(HOLDING_REGISTERS["imbalance_allowed"]["address"], 0)
 
 class BrinkCO2SensorModeSwitch(BrinkControlEntity, SwitchEntity):
     """BRINK CO2 sensor mode switch."""
@@ -94,23 +82,11 @@ class BrinkCO2SensorModeSwitch(BrinkControlEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on CO2 sensor mode."""
-        success = await self.coordinator.async_write_register(
-            HOLDING_REGISTERS["co2_sensor_mode"]["address"],
-            1
-        )
-        
-        if not success:
-            _LOGGER.error("Failed to enable CO2 sensor mode")
+        await self._async_write(HOLDING_REGISTERS["co2_sensor_mode"]["address"], 1)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off CO2 sensor mode."""
-        success = await self.coordinator.async_write_register(
-            HOLDING_REGISTERS["co2_sensor_mode"]["address"],
-            0
-        )
-        
-        if not success:
-            _LOGGER.error("Failed to disable CO2 sensor mode")
+        await self._async_write(HOLDING_REGISTERS["co2_sensor_mode"]["address"], 0)
 
 class BrinkGeoHeatExchangerSwitch(BrinkControlEntity, SwitchEntity):
     """BRINK geo heat exchanger switch."""
@@ -134,23 +110,11 @@ class BrinkGeoHeatExchangerSwitch(BrinkControlEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on geo heat exchanger."""
-        success = await self.coordinator.async_write_register(
-            HOLDING_REGISTERS["geo_heat_exchanger"]["address"],
-            1
-        )
-        
-        if not success:
-            _LOGGER.error("Failed to enable geo heat exchanger")
+        await self._async_write(HOLDING_REGISTERS["geo_heat_exchanger"]["address"], 1)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off geo heat exchanger."""
-        success = await self.coordinator.async_write_register(
-            HOLDING_REGISTERS["geo_heat_exchanger"]["address"],
-            0
-        )
-        
-        if not success:
-            _LOGGER.error("Failed to disable geo heat exchanger")
+        await self._async_write(HOLDING_REGISTERS["geo_heat_exchanger"]["address"], 0)
 
 class BrinkDeviceResetSwitch(BrinkControlEntity, SwitchEntity):
     """BRINK device reset switch."""
@@ -161,6 +125,9 @@ class BrinkDeviceResetSwitch(BrinkControlEntity, SwitchEntity):
         
         self._attr_name = "Device Reset"
         self._attr_unique_id = f"{entry.entry_id}_device_reset_switch"
+        # A "switch" that reboots the unit fires on bulk turn_on calls; the
+        # Reset Device button replaces it. Kept (disabled) for existing installs.
+        self._attr_entity_registry_enabled_default = False
         self._attr_device_class = SwitchDeviceClass.SWITCH
         self._attr_icon = "mdi:restart"
 
@@ -173,15 +140,7 @@ class BrinkDeviceResetSwitch(BrinkControlEntity, SwitchEntity):
         """Trigger device reset."""
         _LOGGER.warning("Triggering BRINK device reset")
         
-        success = await self.coordinator.async_write_register(
-            HOLDING_REGISTERS["device_reset"]["address"],
-            1
-        )
-        
-        if success:
-            _LOGGER.info("BRINK device reset triggered successfully")
-        else:
-            _LOGGER.error("Failed to trigger device reset")
+        await self._async_write(HOLDING_REGISTERS["device_reset"]["address"], 1)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off - no action needed for reset."""
@@ -206,10 +165,8 @@ class BrinkStandbySwitch(BrinkControlEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Set the unit in standby."""
-        if not await self.coordinator.async_write_register(HOLDING_REGISTERS["standby"]["address"], 1):
-            _LOGGER.error("Failed to set standby")
+        await self._async_write(HOLDING_REGISTERS["standby"]["address"], 1)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Return the unit to normal mode."""
-        if not await self.coordinator.async_write_register(HOLDING_REGISTERS["standby"]["address"], 2):
-            _LOGGER.error("Failed to leave standby")
+        await self._async_write(HOLDING_REGISTERS["standby"]["address"], 2)

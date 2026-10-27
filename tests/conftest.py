@@ -14,6 +14,9 @@ class FakeEntry:
     data: dict[str, Any]
     entry_id: str = "test-entry"
 
+    def async_on_unload(self, func: Any) -> None:
+        """Coordinators register unload callbacks on their config entry."""
+
 
 class FakeHass:
     """The subset of Home Assistant needed for coordinator construction."""

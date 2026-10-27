@@ -30,7 +30,7 @@ The Flair installation manual documents remote-control register 8000 as:
 | `1` | Switch control; required before writing switch position 8001 |
 | `2` | Flow control; required before writing flow setpoint 8002 |
 
-To use controls, explicitly enable **Enable writable controls** when adding the entry. Select **Modbus Control Mode** yourself before changing a power mode or flow setpoint. The integration never changes the mode as a side effect of another control. Select **Disabled** to return to autonomous control.
+To use controls, explicitly enable **Enable writable controls** when adding the entry. Select **Modbus Control Mode** yourself before changing a power mode or flow setpoint, or enable *Switch Modbus control mode automatically* to let those controls write the matching mode first. Without that option, the integration never changes the mode as a side effect of another control. Select **Disabled** to return to autonomous control.
 
 The documented remote-flow range for 8002 is `0` or `50` through the model maximum:
 
@@ -105,6 +105,8 @@ python -m compileall -q custom_components
 ```
 
 Tests use mocked Modbus clients; no physical gateway or BRINK unit is exercised by the automated suite.
+
+Contributor and agent notes live in [AGENTS.md](AGENTS.md); release history is in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

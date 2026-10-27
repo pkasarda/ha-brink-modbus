@@ -8,6 +8,8 @@ Home Assistant custom integration (`custom_components/brink_modbus`) for BRINK F
 - **Register 8000 (Modbus control mode) is safety-relevant.** Only a user action writes it: the select entity, or a flow/switch write while `auto_control_mode` is on. Setup, polling, and reconnects never write.
 - Entries created before 2.7.0 have no `control_enabled` / `auto_control_mode` keys and must default to `True`. New entries default to monitoring-only.
 - All Modbus I/O goes through `BrinkCoordinator` (one transaction lock). Never call the client from entities.
+- Never poll command registers (`UNPOLLED_HOLDING_REGISTERS`, e.g. 8010/8011): reading them changes device state. New registers must tolerate firmware that rejects them.
+- Keep `quality_scale.yaml` honest: mark a rule `done` only when code or README really covers it.
 - Keep `strings.json` and `translations/{en,sk,cs,pl}.json` in sync when changing config-flow fields.
 
 ## Read when needed

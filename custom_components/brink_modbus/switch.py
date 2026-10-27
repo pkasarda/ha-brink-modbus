@@ -28,6 +28,7 @@ async def async_setup_entry(
         BrinkCO2SensorModeSwitch(coordinator, entry),
         BrinkGeoHeatExchangerSwitch(coordinator, entry),
         BrinkDeviceResetSwitch(coordinator, entry),
+        BrinkStandbySwitch(coordinator, entry),
     ]
     
     async_add_entities(entities)
@@ -184,3 +185,31 @@ class BrinkDeviceResetSwitch(BrinkControlEntity, SwitchEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off - no action needed for reset."""
+
+
+class BrinkStandbySwitch(BrinkControlEntity, SwitchEntity):
+    """Put the unit in standby (8003: write 1 = standby, 2 = normal; reads 1 in standby)."""
+
+    def __init__(self, coordinator: BrinkCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the switch."""
+        super().__init__(coordinator, entry)
+        self._attr_name = "Standby"
+        self._attr_unique_id = f"{entry.entry_id}_standby"
+        self._attr_icon = "mdi:power-sleep"
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return true while the unit is in standby (also when set by another interface)."""
+        if self.coordinator.data is None or self.coordinator.data.get("standby") is None:
+            return None
+        return self.coordinator.data["standby"] == 1
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Set the unit in standby."""
+        if not await self.coordinator.async_write_register(HOLDING_REGISTERS["standby"]["address"], 1):
+            _LOGGER.error("Failed to set standby")
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Return the unit to normal mode."""
+        if not await self.coordinator.async_write_register(HOLDING_REGISTERS["standby"]["address"], 2):
+            _LOGGER.error("Failed to leave standby")

@@ -25,6 +25,12 @@ class BrinkEntity(CoordinatorEntity[BrinkCoordinator]):
             "manufacturer": MANUFACTURER,
             "model": SUPPORTED_MODELS.get(entry.data.get("model", "unknown"), "Unknown"),
         }
+        # Derived by the coordinator from registers 4000-4012 when the unit reports them.
+        data = coordinator.data or {}
+        if data.get("software_version"):
+            self._attr_device_info["sw_version"] = data["software_version"]
+        if data.get("serial_number"):
+            self._attr_device_info["serial_number"] = data["serial_number"]
 
 
 class BrinkControlEntity(BrinkEntity):

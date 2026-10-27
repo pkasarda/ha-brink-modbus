@@ -25,6 +25,7 @@ from .const import (
     HOLDING_REGISTERS,
     INPUT_REGISTERS,
     SCAN_INTERVAL_FAST,
+    UNPOLLED_HOLDING_REGISTERS,
 )
 from .transport import (
     async_close_client,
@@ -46,11 +47,46 @@ def _contiguous_blocks(
     """Group only exactly contiguous known register definitions."""
     blocks: list[list[tuple[str, dict[str, Any]]]] = []
     for name, config in sorted(registers, key=lambda item: item[1]["address"]):
-        if blocks and config["address"] == blocks[-1][-1][1]["address"] + 1:
+        if blocks and config["address"] == _end_address(blocks[-1][-1][1]):
             blocks[-1].append((name, config))
         else:
             blocks.append([(name, config)])
     return blocks
+
+
+def _end_address(config: dict[str, Any]) -> int:
+    """Return the first address after a (possibly multi-word) register."""
+    return config["address"] + config.get("words", 1)
+
+
+def _bcd(word: int) -> str | None:
+    """Decode four BCD digits; None when a nibble is not a decimal digit."""
+    digits = f"{word:04X}"
+    return digits if digits.isdigit() else None
+
+
+def _derived_values(data: dict[str, Any]) -> dict[str, str]:
+    """Build the software version and serial number strings (registers 4000-4012)."""
+    derived: dict[str, str] = {}
+    serial_words = [data.get(f"serial_number_{index}") for index in (1, 2, 3)]
+    if all(isinstance(word, int) for word in serial_words):
+        parts = [_bcd(word) for word in serial_words]  # type: ignore[arg-type]
+        if all(parts):
+            derived["serial_number"] = "".join(parts)  # type: ignore[arg-type]
+
+    version = [data.get(key) for key in (
+        "software_version_type", "software_version_minor", "software_version_build"
+    )]
+    if all(isinstance(word, int) for word in version):
+        type_word, minor_word, build = version  # type: ignore[misc]
+        # 4000: high byte = type letter in ASCII (e.g. "S"), low byte = major.
+        # 4001: high byte = minor, low byte = fix. 4002: build number.
+        letter = chr(type_word >> 8) if 0x41 <= type_word >> 8 <= 0x5A else ""
+        derived["software_version"] = (
+            f"{letter}{type_word & 0xFF}.{minor_word >> 8:02d}.{minor_word & 0xFF:02d} "
+            f"build {build}"
+        )
+    return derived
 
 
 def _register_value(raw_value: int, config: dict[str, Any]) -> float | int:
@@ -85,6 +121,9 @@ class BrinkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.client = create_modbus_client(entry.data)
         self._transaction_lock = asyncio.Lock()
         self._last_connection_error: str | None = None
+        # Addresses the unit answered with a Modbus exception (unsupported by
+        # this firmware); skipped until the entry is reloaded.
+        self.unsupported_registers: set[int] = set()
 
         if self.connection_type == CONNECTION_TYPE_SERIAL:
             self.port = str(entry.data[CONF_SERIAL_PORT])
@@ -137,7 +176,7 @@ class BrinkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     ) -> dict[str, float | int]:
         """Read one known contiguous block and map values to entity keys."""
         address = block[0][1]["address"]
-        count = len(block)
+        count = _end_address(block[-1][1]) - address
         try:
             if register_type == "input":
                 result = await self.client.read_input_registers(
@@ -158,10 +197,17 @@ class BrinkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         if result is None or result.isError():
             # An explicit Modbus exception is a response from a healthy device,
-            # usually for an optional/unsupported setting. Keep other sensors
-            # available. Timeouts and I/O failures are not ExceptionResponse.
+            # usually for an optional/unsupported register. Retry a multi-register
+            # block one register at a time so one unsupported address does not
+            # hide its neighbours. Timeouts and I/O failures are not ExceptionResponse.
             if isinstance(result, ExceptionResponse):
                 _LOGGER.debug("BRINK rejected read at register %s: %s", address, result)
+                if len(block) > 1:
+                    data: dict[str, float | int] = {}
+                    for item in block:
+                        data.update(await self._async_read_block(register_type, [item]))
+                    return data
+                self.unsupported_registers.add(address)
                 return {}
             raise _TransportFailure(f"No usable Modbus response at register {address}")
 
@@ -169,10 +215,14 @@ class BrinkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if registers is None or len(registers) != count:
             raise _TransportFailure(f"Incomplete Modbus response at register {address}")
 
-        return {
-            name: _register_value(registers[index], config)
-            for index, (name, config) in enumerate(block)
-        }
+        values: dict[str, float | int] = {}
+        for name, config in block:
+            offset = config["address"] - address
+            if config.get("words", 1) == 2:
+                values[name] = (registers[offset] << 16) | registers[offset + 1]
+            else:
+                values[name] = _register_value(registers[offset], config)
+        return values
 
     async def _async_read_mapped_registers(
         self,
@@ -181,7 +231,12 @@ class BrinkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     ) -> dict[str, float | int]:
         """Read mapped registers while allowing isolated optional failures."""
         data: dict[str, float | int] = {}
-        for block in _contiguous_blocks(registers):
+        supported = (
+            (name, config)
+            for name, config in registers
+            if config["address"] not in self.unsupported_registers
+        )
+        for block in _contiguous_blocks(supported):
             data.update(await self._async_read_block(register_type, block))
         return data
 
@@ -191,7 +246,7 @@ class BrinkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return (
             (name, config)
             for name, config in HOLDING_REGISTERS.items()
-            if name not in {"slave_address", "device_reset"}
+            if name not in UNPOLLED_HOLDING_REGISTERS
         )
 
     async def _async_update_data(self) -> dict[str, Any]:
@@ -220,6 +275,7 @@ class BrinkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._log_connection_failure(err)
             raise UpdateFailed(str(err))
 
+        data.update(_derived_values(data))
         self._last_connection_error = None
         return data
 

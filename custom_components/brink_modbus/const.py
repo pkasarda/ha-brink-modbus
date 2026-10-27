@@ -11,6 +11,7 @@ PLATFORMS = [
     Platform.SENSOR,
     Platform.BINARY_SENSOR,
     Platform.NUMBER,
+    Platform.BUTTON,
     Platform.SELECT,
     Platform.SWITCH,
 ]
@@ -69,15 +70,35 @@ SCAN_INTERVAL_FAST = 10  # seconds - for temperatures, flows
 SCAN_INTERVAL_SLOW = 60  # seconds - for settings, diagnostics
 
 # Modbus Register Maps
-# Based on BRINK FLAIR 325 Plus documentation
+# Based on BRINK "Modbus UWA2-B/UWA2-E" installation regulations (614882-D).
+#
+# Optional keys per register:
+#   "entity": False        read for derived values only, no entity of its own
+#   "words": 2             unsigned 32-bit value in two registers, high word first
+#   "map": {...}           enumerated status shown as text
+#   "category": "diagnostic" / "config"
+#   "enabled": False       entity disabled by default for new installs
+#   "state_class": "total_increasing"
 
 # Input Registers (Read-Only) - Function Code 04
 INPUT_REGISTERS = {
     # System Information
-    "device_type": {"address": 4004, "type": "int16", "unit": None},
-    "serial_number_1": {"address": 4010, "type": "int16", "unit": None},
-    "serial_number_2": {"address": 4011, "type": "int16", "unit": None},
-    "software_version": {"address": 4012, "type": "int16", "unit": None},
+    # 4000-4002 software version and 4010-4012 BCD serial number feed the
+    # device info (sw_version / serial_number) and the Software Version sensor.
+    "software_version_type": {"address": 4000, "type": "int16", "unit": None, "entity": False},
+    "software_version_minor": {"address": 4001, "type": "int16", "unit": None, "entity": False},
+    "software_version_build": {"address": 4002, "type": "int16", "unit": None, "entity": False},
+    "device_type": {"address": 4004, "type": "int16", "unit": None, "category": "diagnostic"},
+    "serial_number_1": {"address": 4010, "type": "int16", "unit": None, "category": "diagnostic"},
+    "serial_number_2": {"address": 4011, "type": "int16", "unit": None, "category": "diagnostic"},
+    "serial_number_3": {"address": 4012, "type": "int16", "unit": None, "entity": False},
+
+    # Operating state
+    "active_function": {"address": 4020, "type": "int16", "unit": None, "map": "ACTIVE_FUNCTION_MAP"},
+    "fan_control_type": {"address": 4021, "type": "int16", "unit": None, "map": "FAN_CONTROL_TYPE_MAP", "category": "diagnostic", "enabled": False},
+    "ventilation_mode": {"address": 4022, "type": "int16", "unit": None, "map": "VENTILATION_MODE_MAP"},
+    "supply_fan_status": {"address": 4030, "type": "int16", "unit": None, "map": "FAN_STATUS_MAP", "category": "diagnostic"},
+    "exhaust_fan_status": {"address": 4040, "type": "int16", "unit": None, "map": "FAN_STATUS_MAP", "category": "diagnostic"},
     
     # Pressures (Pa, divided by 10)
     "supply_pressure": {"address": 4023, "type": "int16", "signed": True, "unit": "Pa", "scale": 0.1, "device_class": "pressure"},
@@ -104,10 +125,19 @@ INPUT_REGISTERS = {
     "bypass_state": {"address": 4050, "type": "int16", "unit": None},
     "preheater_state": {"address": 4060, "type": "int16", "unit": None},
     "preheater_power": {"address": 4061, "type": "int16", "unit": "%"},
+    "frost_status": {"address": 4070, "type": "int16", "unit": None, "map": "FROST_STATUS_MAP"},
+    "frost_heater_power": {"address": 4071, "type": "int16", "unit": "%"},
+    "frost_fan_reduction": {"address": 4072, "type": "int16", "unit": "%"},
+    "flow_switch_position": {"address": 4080, "type": "int16", "unit": None, "map": "FLOW_SWITCH_MAP"},
     "filter_state": {"address": 4100, "type": "int16", "unit": None},
+    "operating_time": {"address": 4113, "type": "int16", "words": 2, "unit": "h", "state_class": "total_increasing", "category": "diagnostic"},
     "filter_usage_hours": {"address": 4115, "type": "int16", "unit": "h"},
     
-    # CO2 Sensors (ppm)
+    # CO2 Sensors (ppm); status registers precede each value
+    "co2_sensor_1_status": {"address": 4200, "type": "int16", "unit": None, "map": "CO2_STATUS_MAP", "category": "diagnostic", "enabled": False},
+    "co2_sensor_2_status": {"address": 4202, "type": "int16", "unit": None, "map": "CO2_STATUS_MAP", "category": "diagnostic", "enabled": False},
+    "co2_sensor_3_status": {"address": 4204, "type": "int16", "unit": None, "map": "CO2_STATUS_MAP", "category": "diagnostic", "enabled": False},
+    "co2_sensor_4_status": {"address": 4206, "type": "int16", "unit": None, "map": "CO2_STATUS_MAP", "category": "diagnostic", "enabled": False},
     "co2_sensor_1": {"address": 4201, "type": "int16", "unit": "ppm", "device_class": "carbon_dioxide"},
     "co2_sensor_2": {"address": 4203, "type": "int16", "unit": "ppm", "device_class": "carbon_dioxide"},
     "co2_sensor_3": {"address": 4205, "type": "int16", "unit": "ppm", "device_class": "carbon_dioxide"},
@@ -129,14 +159,22 @@ HOLDING_REGISTERS = {
     
     # Bypass mode setting
     "bypass_mode_setting": {"address": 6100, "type": "int16", "unit": None, "min": 0, "max": 2},
+    # Bypass thresholds, tenths of °C; min/max/step below are in °C
+    "bypass_temperature_dwelling": {"address": 6101, "type": "int16", "signed": True, "unit": "°C", "scale": 0.1, "min": 15.0, "max": 35.0, "step": 0.5},
+    "bypass_temperature_outside": {"address": 6102, "type": "int16", "signed": True, "unit": "°C", "scale": 0.1, "min": 7.0, "max": 15.0, "step": 0.5},
+    "bypass_temperature_hysteresis": {"address": 6103, "type": "int16", "signed": True, "unit": "°C", "scale": 0.1, "min": 0.0, "max": 5.0, "step": 0.5},
+
+    # Filter
+    "filter_warning_days": {"address": 6120, "type": "int16", "unit": "d", "min": 1, "max": 365},
     
     # CO2 settings
     "co2_sensor_mode": {"address": 6150, "type": "int16", "unit": None, "min": 0, "max": 1},
     
     # Geo heat exchanger settings
     "geo_heat_exchanger": {"address": 6240, "type": "int16", "unit": None, "min": 0, "max": 1},
-    "geo_min_temperature": {"address": 6241, "type": "int16", "signed": True, "unit": "°C", "min": 0, "max": 100},
-    "geo_max_temperature": {"address": 6242, "type": "int16", "signed": True, "unit": "°C", "min": 150, "max": 400},
+    # Tenths of °C; min/max below are in °C
+    "geo_min_temperature": {"address": 6241, "type": "int16", "signed": True, "unit": "°C", "scale": 0.1, "min": 0.0, "max": 10.0},
+    "geo_max_temperature": {"address": 6242, "type": "int16", "signed": True, "unit": "°C", "scale": 0.1, "min": 15.0, "max": 40.0},
     
     # Modbus control settings
     "slave_address": {"address": 7991, "type": "int16", "unit": None, "min": 1, "max": 247},
@@ -145,8 +183,15 @@ HOLDING_REGISTERS = {
     # Register 8002 is model-specific. Use ``get_airflow_limits`` rather than
     # this legacy default when exposing a control or validating a service.
     "flow_setpoint": {"address": 8002, "type": "int16", "unit": "m³/h", "min": 50, "max": 325},
+    # Write 1 = standby, 2 = normal mode; reads back 1 while in standby.
+    "standby": {"address": 8003, "type": "int16", "unit": None, "min": 0, "max": 2},
+    # Command registers: reading them clears the last result, so never poll.
+    "filter_reset": {"address": 8010, "type": "int16", "unit": None, "min": 0, "max": 1},
     "device_reset": {"address": 8011, "type": "int16", "unit": None, "min": 0, "max": 1},
 }
+
+# Holding registers that are actions, not state; the coordinator never reads them.
+UNPOLLED_HOLDING_REGISTERS = {"slave_address", "filter_reset", "device_reset"}
 
 # Text mappings for status values
 BYPASS_STATE_MAP = {
@@ -167,6 +212,89 @@ PREHEATER_STATE_MAP = {
     0: "Off",
     1: "Starting",
     2: "Active",
+    3: "Test mode",
+}
+
+ACTIVE_FUNCTION_MAP = {
+    0: "Standby",
+    1: "Bootloader",
+    2: "Non-blocking error",
+    3: "Blocking error",
+    4: "Manual",
+    5: "Holiday",
+    6: "Night ventilation",
+    7: "Party",
+    8: "Bypass boost",
+    9: "Normal boost",
+    10: "Auto CO2",
+    11: "Auto eBus",
+    12: "Auto Modbus",
+    13: "Auto LAN/WLAN portal",
+    14: "Auto LAN/WLAN local",
+}
+
+FAN_CONTROL_TYPE_MAP = {
+    0: "Initializing",
+    1: "Constant flow",
+    2: "Constant PWM",
+    3: "Off",
+    4: "Error",
+    5: "Mass balance",
+    6: "Standby",
+}
+
+VENTILATION_MODE_MAP = {
+    0: "Holiday",
+    1: "Low",
+    2: "Normal",
+    3: "High",
+    4: "Auto",
+}
+
+FAN_STATUS_MAP = {
+    2: "No communication",
+    3: "Idle",
+    4: "Running",
+    5: "Blocked",
+    6: "Fan error",
+}
+
+FROST_STATUS_MAP = {
+    0: "Not initialized",
+    1: "Power-up delay",
+    2: "No frost",
+    3: "No frost delay",
+    4: "Frost control start delay",
+    5: "Wait for icing",
+    6: "Ice detected delay",
+    7: "Heating",
+    8: "Wait for free heater",
+    9: "Fan control start delay",
+    10: "Fan control wait delay",
+    11: "Fan control",
+    12: "Fan off delay",
+    13: "Fan off",
+    14: "Fan restarting",
+    15: "Error",
+    16: "Test mode",
+}
+
+FLOW_SWITCH_MAP = {
+    0: "Holiday",
+    1: "Low",
+    2: "Normal",
+    3: "High",
+    255: "Invalid",
+}
+
+CO2_STATUS_MAP = {
+    0: "Error",
+    1: "Not initialized",
+    2: "Idle",
+    3: "Warming up",
+    4: "Running",
+    5: "Calibrating",
+    6: "Self test",
 }
 
 BYPASS_MODE_MAP = {

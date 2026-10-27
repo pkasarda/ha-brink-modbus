@@ -13,6 +13,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     PERCENTAGE,
     REVOLUTIONS_PER_MINUTE,
+    EntityCategory,
     UnitOfPressure,
     UnitOfTemperature,
     UnitOfTime,
@@ -21,6 +22,7 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from . import const
 from .const import (
     BYPASS_MODE_MAP,
     BYPASS_STATE_MAP,
@@ -53,9 +55,23 @@ async def async_setup_entry(
     # Add input register sensors
     for sensor_key, config in INPUT_REGISTERS.items():
         # Skip numeric entities if text version exists (data still loaded by coordinator)
-        if sensor_key in text_only_sensors:
+        if sensor_key in text_only_sensors or config.get("entity") is False:
+            continue
+        if "map" in config:
+            entities.append(BrinkMappedSensor(coordinator, entry, sensor_key, config))
             continue
         entities.append(BrinkSensor(coordinator, entry, sensor_key, config, "input"))
+
+    # Software version is derived from registers 4000-4002 (kept unique_id).
+    entities.append(
+        BrinkSensor(
+            coordinator,
+            entry,
+            "software_version",
+            {"unit": None, "category": "diagnostic"},
+            "derived",
+        )
+    )
     
     # Add selected holding register sensors (read-only view)
     # Note: bypass_mode_setting and power_switch_position have text versions, so skip numeric
@@ -77,6 +93,47 @@ async def async_setup_entry(
     ])
     
     async_add_entities(entities)
+
+def _apply_registry_options(entity: SensorEntity, config: dict[str, Any]) -> None:
+    """Apply entity category and default-enabled flags from a register definition."""
+    if config.get("category") == "diagnostic":
+        entity._attr_entity_category = EntityCategory.DIAGNOSTIC
+    if config.get("enabled") is False:
+        entity._attr_entity_registry_enabled_default = False
+
+
+class BrinkMappedSensor(BrinkEntity, SensorEntity):
+    """Enumerated status register shown as text (maps in const.py)."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
+
+    def __init__(
+        self,
+        coordinator: BrinkCoordinator,
+        entry: ConfigEntry,
+        sensor_key: str,
+        config: dict[str, Any],
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry)
+        self._sensor_key = sensor_key
+        self._map: dict[int, str] = getattr(const, config["map"])
+        self._attr_name = sensor_key.replace("_", " ").title()
+        self._attr_unique_id = f"{entry.entry_id}_{sensor_key}"
+        self._attr_options = list(dict.fromkeys([*self._map.values(), "Unknown"]))
+        self._attr_icon = "mdi:information-outline"
+        _apply_registry_options(self, config)
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the mapped text, or Unknown for an undocumented value."""
+        if self.coordinator.data is None:
+            return None
+        value = self.coordinator.data.get(self._sensor_key)
+        if value is None:
+            return None
+        return self._map.get(int(value), "Unknown")
+
 
 class BrinkSensor(BrinkEntity, SensorEntity):
     """Base BRINK sensor."""
@@ -135,16 +192,16 @@ class BrinkSensor(BrinkEntity, SensorEntity):
                 self._attr_device_class = SensorDeviceClass.HUMIDITY
         
         # Set state class for numeric sensors
-        if hasattr(self, "_attr_native_unit_of_measurement") and self._attr_native_unit_of_measurement:
+        if config.get("state_class") == "total_increasing":
+            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+        elif hasattr(self, "_attr_native_unit_of_measurement") and self._attr_native_unit_of_measurement:
             self._attr_state_class = SensorStateClass.MEASUREMENT
+
+        _apply_registry_options(self, config)
         
         # Set icon
         self._attr_icon = self._get_icon()
         
-        # Add software version to device info
-        if coordinator.data and coordinator.data.get("software_version") is not None:
-            # The device registry requires a string (an int is rejected from HA 2026.12).
-            self._attr_device_info["sw_version"] = str(coordinator.data["software_version"])
 
     def _get_icon(self) -> str:
         """Get icon for sensor."""

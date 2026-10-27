@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from homeassistant.helpers.update_coordinator import UpdateFailed
+from pymodbus.pdu import ExceptionResponse
 
 from custom_components.brink_modbus import coordinator as coordinator_module
 from custom_components.brink_modbus.const import HOLDING_REGISTERS, INPUT_REGISTERS
@@ -84,6 +85,20 @@ class Client:
         self.connected = False
 
 
+class RejectingClient(Client):
+    """Answer a Modbus exception for any request that covers a rejected address."""
+
+    def __init__(self, rejected: set[int]) -> None:
+        super().__init__()
+        self.rejected = rejected
+
+    async def read_input_registers(self, address: int, *, count: int, device_id: int) -> Any:
+        if self.rejected & set(range(address, address + count)):
+            self.input_calls.append((address, count, device_id))
+            return ExceptionResponse(4, 2)
+        return await super().read_input_registers(address, count=count, device_id=device_id)
+
+
 def _make_coordinator(
     monkeypatch: pytest.MonkeyPatch,
     client: Client,
@@ -112,6 +127,81 @@ async def test_tcp_reads_input_and_holding_registers(
     assert data["modbus_control"] == 8000
     assert all(call[2] == 20 for call in client.input_calls + client.holding_calls)
     assert client.write_calls == []
+
+
+@pytest.mark.asyncio
+async def test_32bit_values_combine_high_word_first(
+    monkeypatch: pytest.MonkeyPatch, tcp_data: dict[str, Any]
+) -> None:
+    client = Client()
+    coordinator = _make_coordinator(monkeypatch, client, tcp_data)
+
+    data = await coordinator._async_update_data()
+
+    # The fake client answers each register with its own address.
+    assert data["operating_time"] == (4113 << 16) | 4114
+    assert data["filter_usage_hours"] == 4115
+
+
+@pytest.mark.asyncio
+async def test_action_registers_are_never_read(
+    monkeypatch: pytest.MonkeyPatch, tcp_data: dict[str, Any]
+) -> None:
+    client = Client()
+    coordinator = _make_coordinator(monkeypatch, client, tcp_data)
+
+    await coordinator._async_update_data()
+
+    read = {
+        address + offset
+        for address, count, _ in client.holding_calls
+        for offset in range(count)
+    }
+    # Reading 8010/8011 clears their last result; 7991 is the bus address.
+    assert not read & {7991, 8010, 8011}
+    assert 8003 in read
+
+
+@pytest.mark.asyncio
+async def test_unsupported_register_does_not_hide_its_block(
+    monkeypatch: pytest.MonkeyPatch, tcp_data: dict[str, Any]
+) -> None:
+    client = RejectingClient(rejected={4030})
+    coordinator = _make_coordinator(monkeypatch, client, tcp_data)
+
+    data = await coordinator._async_update_data()
+
+    assert "supply_fan_status" not in data
+    assert data["supply_volume_setpoint"] == 4031
+    assert data["supply_volume_actual"] == 4032
+
+    # The rejected address is remembered and not requested on the next poll.
+    client.input_calls.clear()
+    await coordinator._async_update_data()
+    assert coordinator.unsupported_registers == {4030}
+    assert all(address != 4030 for address, _, _ in client.input_calls)
+
+
+def test_serial_number_and_software_version_are_decoded() -> None:
+    derived = coordinator_module._derived_values(
+        {
+            "serial_number_1": 0x4300,
+            "serial_number_2": 0x1222,
+            "serial_number_3": 0x3701,
+            "software_version_type": (ord("S") << 8) | 1,
+            "software_version_minor": (2 << 8) | 3,
+            "software_version_build": 4567,
+        }
+    )
+
+    assert derived == {
+        "serial_number": "430012223701",
+        "software_version": "S1.02.03 build 4567",
+    }
+    # A non-BCD word is not reported as a serial number.
+    assert "serial_number" not in coordinator_module._derived_values(
+        {"serial_number_1": 0x4A00, "serial_number_2": 0, "serial_number_3": 0}
+    )
 
 
 @pytest.mark.asyncio
@@ -243,5 +333,7 @@ def test_model_specific_airflow_limits_are_kept_out_of_temperature_settings() ->
 
     assert get_max_airflow("flair_400") == 400
     assert get_max_airflow("flair_325") == 325
-    assert HOLDING_REGISTERS["geo_max_temperature"]["max"] == 400
+    # 6242 is tenths of °C (15.0-40.0 °C per the Brink manual), not an airflow.
+    assert HOLDING_REGISTERS["geo_max_temperature"]["max"] == 40.0
+    assert HOLDING_REGISTERS["geo_max_temperature"]["scale"] == 0.1
     assert INPUT_REGISTERS["co2_sensor_1"]["address"] == 4201
